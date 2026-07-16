@@ -1,0 +1,32 @@
+[project]
+name = "nourishops"
+version = "0.1.0"
+description = "NourishOps — nutrition-aware supply-resilience decision engine (backend). Synthetic data only."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi>=0.115,<0.116",
+    "uvicorn[standard]>=0.32,<0.33",
+    "pydantic>=2.9,<3",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3,<9",
+    "jsonschema>=4.23,<5",
+    "ruff>=0.7,<0.8",
+    "mypy>=1.13,<2",
+]
+
+# The domain engine is base-10 Decimal only (04 §4.0). scripts/check_no_float.py
+# enforces "no binary float in src/nourishops/domain/" at commit time.
+[tool.pytest.ini_options]
+pythonpath = [".", "src"]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/nourishops"]

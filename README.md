@@ -37,3 +37,19 @@
 ## Claim discipline
 
 The prototype runs on synthetic, labeled data. We may say it detects predefined synthetic risks, compares catalog actions under simulated constraints, and shows evidence + human approval. We may **not** claim real-world impact, Food Finders validation, or production readiness. Problem-side figures (the 2026 federal shock) are real and cited; solution-side figures are simulated and labeled.
+
+---
+
+## Backend build (`src/nourishops/`) — status
+
+Scaffold + contract harness in place; the deterministic engine is next. Runnable today with only `jsonschema` + `pytest` (no full install needed):
+
+| Command | What it does |
+|---|---|
+| `make doctor` | Tool + fixture readiness, no state change |
+| `make guard` | Fails if the engine leaks a binary float — enforces the Decimal rule (`04 §4.0`) at commit time |
+| `make test-contracts` | Schema-validates all 5 goldens + 8 fixtures + 5 overlays (18 checks) |
+| `make test-golden` | Recomputes Scenario A's anchors (forecast 9,000 · breach W2 12,000 · gap 15,000 · priority 61) in Decimal **from fixtures** and asserts them against the golden |
+| `make test` | guard + contracts + golden |
+
+Layout follows `BUILD_CONTEXT/05 §5`: `src/nourishops/{domain,application,agents,persistence,api,cli}`. The full toolchain (uv lockfile, FastAPI app, `make dev/build/start`, frontend) lands with the engine.
