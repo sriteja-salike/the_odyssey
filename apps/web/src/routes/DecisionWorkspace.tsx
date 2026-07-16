@@ -45,7 +45,7 @@ export default function DecisionWorkspace() {
     <AppFrame runId={runId} letter={letter} active="decision" onStartClean={() => setConfirmReset(true)}>
       {state.phase === "DRAFT" && <DraftWorkspace letter={letter} onAnalyze={() => setState({ phase: "ANALYZING" })} />}
       {state.phase === "ANALYZING" && <StageTrace onDone={analyzed} />}
-      {state.phase === "READY_FOR_REVIEW" && <Review letter={letter} commit={setState} />}
+      {state.phase === "READY_FOR_REVIEW" && <Review letter={letter} state={state} commit={setState} />}
       {state.phase === "ABSTAINED" && <SafeStop status="ABSTAINED" letter={letter} />}
       {(state.phase === "APPROVED" || state.phase === "REJECTED" || state.phase === "DEFERRED") && state.decision && (
         <ResultWorkspace letter={letter} runId={runId} decision={state.decision} onReset={() => resetRun(runId)} />
@@ -68,17 +68,44 @@ export default function DecisionWorkspace() {
 /* ---------------------------------------------------------------- Review --- */
 type DialogKind = null | "approve" | "reject" | "defer" | "edit";
 
-function Review({ letter, commit }: { letter: ScenarioLetter; commit: (s: RunState) => void }) {
+function Review({ letter, state, commit }: { letter: ScenarioLetter; state: RunState; commit: (s: RunState) => void }) {
   const golden = getGolden(letter);
   const actions = getActionMap(golden.scenario_id);
   const risk = golden.risks.find((r) => r.is_primary) ?? golden.risks[0];
   const rec = golden.recommended_action;
   const recAction: ActionRecord | undefined = actions[rec.action_id];
-
-  // Manager-edited quantity (pending until approved).
-  const [pendingQty, setPendingQty] = useState(rec.requested_quantity_lb);
-  const [editReason, setEditReason] = useState("");
   const [dialog, setDialog] = useState<DialogKind>(null);
+
+  // Current manager selection (pending until a decision commits). Defaults to the
+  // recommended action; may be a chosen alternative (§4.4) or an edited quantity (§4.5).
+  const sel = state.selection;
+  const selId = sel?.actionId ?? rec.action_id;
+  const selAction = actions[selId];
+  const selEval = golden.action_evaluations.find((e) => e.action_id === selId);
+  const selQty = sel?.quantityLb ?? rec.requested_quantity_lb;
+  const unitPrice = selAction?.unit_price_usd_per_lb ?? 0;
+  const selCost = sel?.edited ? selQty * unitPrice : Number(selEval?.cost_usd ?? rec.cost_usd);
+  const isAlt = selId !== rec.action_id;
+  const nonDefault = !!sel && (isAlt || !!sel.edited);
+  const reason = sel?.reason ?? "";
+  const reasonValid = !nonDefault || (reason.trim().length >= 1 && reason.trim().length <= 500);
+  const reasonLabel = isAlt ? "Reason for choosing this alternative" : "Reason for changing the recommended quantity";
+  const reasonErrMsg = isAlt ? "Enter a reason for choosing a non-recommended action." : "Enter a reason for changing the recommended quantity.";
+
+  function selectAlternative(id: string) {
+    const a = actions[id];
+    const ev = golden.action_evaluations.find((e) => e.action_id === id);
+    commit({ ...state, selection: { actionId: id, quantityLb: a?.requested_quantity_lb ?? ev?.requested_quantity_lb ?? 0, reason: "", edited: false } });
+  }
+  function setReason(r: string) {
+    commit({ ...state, selection: { actionId: selId, quantityLb: selQty, reason: r, edited: sel?.edited ?? false } });
+  }
+  function useRecommended() {
+    commit({ phase: "READY_FOR_REVIEW" });
+  }
+  function approve() {
+    commit({ phase: "APPROVED", decision: { kind: nonDefault ? "edit-approve" : "approve", actionId: selId, quantityLb: selQty, reason: nonDefault ? reason.trim() : undefined } });
+  }
 
   const catLabel = CATEGORY_LABEL[risk.category_id];
   const base = golden.projections.baseline as Record<string, unknown>;
@@ -114,22 +141,6 @@ function Review({ letter, commit }: { letter: ScenarioLetter; commit: (s: RunSta
     .sort((a, b) => a.rank! - b.rank!);
   const rejected = golden.action_evaluations.filter((e) => !e.feasible);
   const change = whatChanged(letter);
-
-  const edited = pendingQty !== rec.requested_quantity_lb;
-  const unitPrice = recAction?.unit_price_usd_per_lb ?? 0;
-  const currentCost = edited ? pendingQty * unitPrice : Number(rec.cost_usd);
-
-  function approve() {
-    commit({
-      phase: "APPROVED",
-      decision: {
-        kind: edited ? "edit-approve" : "approve",
-        actionId: rec.action_id,
-        quantityLb: pendingQty,
-        reason: edited ? editReason : undefined,
-      },
-    });
-  }
 
   return (
     <div className="workspace">
@@ -169,24 +180,22 @@ function Review({ letter, commit }: { letter: ScenarioLetter; commit: (s: RunSta
           <div className="rec">
             <div className="rec__top">
               <div>
-                <div className="rec__name">{recAction?.display_name ?? rec.action_id}</div>
+                <div className="rec__name">
+                  {recAction?.display_name ?? rec.action_id}
+                  <span className="tag">Recommended</span>
+                </div>
                 <div className="rec__sub">
-                  {usd(currentCost)} · arrives {date(rec.arrival_week_start)}, before the shortage.
+                  {usd(rec.cost_usd)} · arrives {date(rec.arrival_week_start)}, before the shortage.
                   Restores {catLabel.toLowerCase()} to {weeks(target)} of supply and closes the full {lb(rec.gap_reduction_lb)} gap.
                 </div>
                 <div className="hint" style={{ marginTop: 6 }}>Highest-ranked feasible response under these assumptions.</div>
-                {edited && (
-                  <div className="editnote">
-                    <Check size={ICON_SM} aria-hidden /> Manager-edited quantity: {lb(pendingQty)} — {editReason}
-                  </div>
-                )}
               </div>
               <ConfidenceBadge level={rec.confidence} />
             </div>
             <div className="rec__figures">
-              <Fig lab="Quantity" val={lb(pendingQty)} />
+              <Fig lab="Quantity" val={lb(rec.requested_quantity_lb)} />
               <Fig lab="Arrival" val={date(rec.arrival_week_start)} />
-              <Fig lab="Simulated cost" val={usd(currentCost)} />
+              <Fig lab="Simulated cost" val={usd(rec.cost_usd)} />
               <Fig lab="Gap reduction" val={lb(rec.gap_reduction_lb)} />
               <Fig lab="After-state at breach" val={`${lb(risk.target_end_inventory_lb)} · ${weeks(target)}`} />
               <Fig lab="Match score" val={golden.action_evaluations.find((e) => e.action_id === rec.action_id)?.score_display ?? "—"} />
@@ -201,8 +210,26 @@ function Review({ letter, commit }: { letter: ScenarioLetter; commit: (s: RunSta
               </div>
             </div>
 
+            {nonDefault && (
+              <div className="selpanel">
+                <div className="selpanel__head">
+                  <span className="editnote"><Check size={ICON_SM} aria-hidden /> {isAlt ? "Manager-selected alternative" : "Manager-edited quantity"}</span>
+                  <button className="btn btn--ghost btn--sm" onClick={useRecommended}>Use recommended instead</button>
+                </div>
+                <p className="selpanel__summary">
+                  Approving <b>{selAction?.display_name ?? selId}</b> · {lb(selQty)} · {usd(selCost)}
+                  {selEval?.gap_reduction_lb ? ` · closes ${lb(selEval.gap_reduction_lb)} of the ${lb(risk.gap_to_target_lb)} gap` : ""}
+                </p>
+                <label className="field">
+                  <span>{reasonLabel}</span>
+                  <textarea value={reason} maxLength={500} rows={2} onChange={(e) => setReason(e.target.value)} />
+                  {!reasonValid && <span className="field__err">{reasonErrMsg}</span>}
+                </label>
+              </div>
+            )}
+
             <div className="actions">
-              <button className="btn btn--primary" onClick={() => setDialog("approve")}>
+              <button className="btn btn--primary" disabled={nonDefault && !reasonValid} onClick={() => setDialog("approve")}>
                 <ShieldCheck size={ICON} aria-hidden /> Approve simulated action
               </button>
               <button className="btn btn--secondary" onClick={() => setDialog("edit")}>Edit quantity</button>
@@ -223,20 +250,29 @@ function Review({ letter, commit }: { letter: ScenarioLetter; commit: (s: RunSta
                 <th scope="col" className="num">Gap reduction</th>
                 <th scope="col" className="num">Score</th>
                 <th scope="col">Evidence</th>
+                <th scope="col"><span className="visually-hidden">Select</span></th>
               </tr>
             </thead>
             <tbody>
               {alternatives.map((e) => {
                 const a = actions[e.action_id];
                 const usable = e.expected_usable_quantity_lb;
+                const chosen = selId === e.action_id;
                 return (
-                  <tr key={e.evaluated_action_id}>
+                  <tr key={e.evaluated_action_id} className={chosen ? "row--chosen" : undefined}>
                     <td>{a?.display_name ?? e.action_id}</td>
                     <td className="num">{lb(e.requested_quantity_lb)}</td>
                     <td className="num">{usd(e.cost_usd)}</td>
                     <td className="num">{usable ? `${lb(usable)}*` : lb(e.gap_reduction_lb ?? 0)}</td>
                     <td className="num">{e.score_display}</td>
                     <td>{e.evidence_ids?.[0] ? <a className="srcid" href="#evidence" aria-label={`View source ${e.evidence_ids[0]}`}>View</a> : "—"}</td>
+                    <td>
+                      {chosen ? (
+                        <span className="chip chip--pass"><Check size={ICON_SM} aria-hidden /> Selected</span>
+                      ) : (
+                        <button className="btn btn--secondary btn--sm" onClick={() => selectAlternative(e.action_id)}>Select</button>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
@@ -315,30 +351,30 @@ function Review({ letter, commit }: { letter: ScenarioLetter; commit: (s: RunSta
         >
           <p>This updates only the current synthetic run. It will not place an order, reserve food, contact a donor, or notify another organization.</p>
           <dl className="kv">
-            <div><dt>Action</dt><dd>{recAction?.display_name ?? rec.action_id}</dd></div>
-            <div><dt>Quantity</dt><dd>{lb(pendingQty)}</dd></div>
-            <div><dt>Simulated cost</dt><dd>{usd(currentCost)}</dd></div>
-            <div><dt>Arrival</dt><dd>{date(rec.arrival_week_start)}</dd></div>
-            {edited && <div><dt>Manager reason</dt><dd>{editReason}</dd></div>}
+            <div><dt>Action</dt><dd>{selAction?.display_name ?? selId}</dd></div>
+            <div><dt>Quantity</dt><dd>{lb(selQty)}</dd></div>
+            <div><dt>Simulated cost</dt><dd>{usd(selCost)}</dd></div>
+            <div><dt>Arrival</dt><dd>{date(selAction?.arrival_week_start ?? rec.arrival_week_start)}</dd></div>
+            {nonDefault && <div><dt>Manager reason</dt><dd>{reason}</dd></div>}
           </dl>
         </Dialog>
       )}
 
       {dialog === "reject" && (
-        <RejectDialog onClose={() => setDialog(null)} onConfirm={(reason) => { setDialog(null); commit({ phase: "REJECTED", decision: { kind: "reject", actionId: rec.action_id, quantityLb: pendingQty, reason } }); }} />
+        <RejectDialog onClose={() => setDialog(null)} onConfirm={(r) => { setDialog(null); commit({ phase: "REJECTED", decision: { kind: "reject", actionId: selId, quantityLb: selQty, reason: r } }); }} />
       )}
 
       {dialog === "defer" && (
-        <DeferDialog onClose={() => setDialog(null)} onConfirm={(reason) => { setDialog(null); commit({ phase: "DEFERRED", decision: { kind: "defer", actionId: rec.action_id, quantityLb: pendingQty, reason } }); }} />
+        <DeferDialog onClose={() => setDialog(null)} onConfirm={(r) => { setDialog(null); commit({ phase: "DEFERRED", decision: { kind: "defer", actionId: selId, quantityLb: selQty, reason: r } }); }} />
       )}
 
-      {dialog === "edit" && recAction && (
+      {dialog === "edit" && selAction && (
         <EditQuantityDialog
-          action={recAction}
-          initialQty={pendingQty}
-          initialReason={editReason}
+          action={selAction}
+          initialQty={selQty}
+          initialReason={sel?.edited ? reason : ""}
           onClose={() => setDialog(null)}
-          onRecheck={(qty, reason) => { setPendingQty(qty); setEditReason(reason); setDialog(null); }}
+          onRecheck={(qty, r) => { setDialog(null); commit({ ...state, selection: { actionId: selId, quantityLb: qty, reason: r, edited: true } }); }}
         />
       )}
     </div>

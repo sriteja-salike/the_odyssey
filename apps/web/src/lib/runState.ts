@@ -24,9 +24,19 @@ export interface Decision {
   reason?: string;
 }
 
+/** Pending manager selection in READY_FOR_REVIEW, before a decision is committed
+    (01 §4.4/§4.5). Survives navigation to Compare so the manager row can render. */
+export interface Selection {
+  actionId: string;
+  quantityLb: number;
+  reason: string;
+  edited: boolean; // true when quantity was changed via Edit quantity
+}
+
 export interface RunState {
   phase: Phase;
   decision?: Decision;
+  selection?: Selection;
 }
 
 const KEY = (runId: string) => `nourishops:run:${runId}`;

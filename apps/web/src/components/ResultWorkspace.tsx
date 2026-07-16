@@ -65,42 +65,86 @@ export default function ResultWorkspace({
   }
 
   // APPROVE / EDIT-APPROVE
+  const rec = golden.recommended_action;
   const qty = decision.quantityLb;
-  const cost = action ? qty * action.unit_price_usd_per_lb : Number(golden.recommended_action.cost_usd);
+  const cost = action ? qty * action.unit_price_usd_per_lb : Number(rec.cost_usd);
   const remaining = TOTAL_BUDGET - cost;
-  const beforeWos = wos(risk.conservative_end_wos_at_breach);
-  const beforeInv = risk.conservative_end_inventory_lb_at_breach;
+  const isRecommendedDefault =
+    decision.kind === "approve" && decision.actionId === rec.action_id && qty === rec.requested_quantity_lb;
+
+  if (isRecommendedDefault) {
+    // Exact recommended plan — the golden carries the verified full-heal after-state.
+    const beforeWos = wos(risk.conservative_end_wos_at_breach);
+    const beforeInv = risk.conservative_end_inventory_lb_at_breach;
+    return (
+      <div className="stack" style={{ maxWidth: 900 }}>
+        <section>
+          <span className="pill pill--ok"><Check size={ICON} aria-hidden /> Simulation updated</span>
+          <h1 className="risk-title">{catLabel} coverage restored in the simulation</h1>
+          <p className="lead">
+            {action?.display_name ?? decision.actionId} was applied to this synthetic run.{" "}
+            {catLabel} coverage at the breach week rises from{" "}
+            <span className="hot hot--danger">{beforeWos} weeks</span> to{" "}
+            <span className="hot" style={{ color: "var(--ok)" }}>{weeks(risk.target_weeks_of_supply)}</span>.
+          </p>
+          <p className="hint"><Check size={ICON_SM} aria-hidden style={{ verticalAlign: "-2px" }} /> No external action was taken.</p>
+        </section>
+        <section className="card">
+          <h2 className="sec">Before / after at the breach week</h2>
+          <div className="beforeafter">
+            <BA lab={`${catLabel} coverage`} before={`${beforeWos} weeks`} after={`${weeks(risk.target_weeks_of_supply)}`} good />
+            <BA lab="Ending inventory" before={lb(beforeInv)} after={lb(risk.target_end_inventory_lb)} good />
+            <BA lab="Gap to target" before={lb(risk.gap_to_target_lb)} after={lb(0)} good />
+            <BA lab="Budget remaining" before={usd(TOTAL_BUDGET)} after={usd(remaining)} />
+          </div>
+          <p className="hint" style={{ marginTop: "var(--s4)" }}>
+            Simulated cost {usd(cost)} for {lb(qty)}.{" "}
+            {golden.projections.recommended_action_after.remaining_open_risk_ids.length === 0
+              ? "No category remains below its minimum in the four-week view."
+              : "Some risks remain open — see the comparison."}
+          </p>
+        </section>
+        {links}
+      </div>
+    );
+  }
+
+  // Non-recommended or edited plan: report only what we can verify without the
+  // engine — cost, budget, and gap reduction — and don't fabricate coverage.
+  const gap = Number(risk.gap_to_target_lb);
+  const evalRow = golden.action_evaluations.find((e) => e.action_id === decision.actionId);
+  const gapReduction =
+    action?.action_type === "PURCHASE"
+      ? Math.min(qty, gap)
+      : Number(evalRow?.gap_reduction_lb ?? evalRow?.expected_usable_quantity_lb ?? 0);
+  const residual = Math.max(0, gap - gapReduction);
 
   return (
     <div className="stack" style={{ maxWidth: 900 }}>
       <section>
         <span className="pill pill--ok"><Check size={ICON} aria-hidden /> Simulation updated</span>
-        <h1 className="risk-title">{catLabel} coverage restored in the simulation</h1>
+        <h1 className="risk-title">{action?.display_name ?? decision.actionId} applied</h1>
         <p className="lead">
-          {action?.display_name ?? decision.actionId} was applied to this synthetic run.{" "}
-          {catLabel} coverage at the breach week rises from{" "}
-          <span className="hot hot--danger">{beforeWos} weeks</span> to{" "}
-          <span className="hot" style={{ color: "var(--ok)" }}>{weeks(risk.target_weeks_of_supply)}</span>.
+          Applied to this synthetic run — it closes{" "}
+          <span className="hot" style={{ color: "var(--ok)" }}>{lb(gapReduction)}</span> of the {lb(gap)}{" "}
+          {catLabel.toLowerCase()} gap{residual > 0 ? <>, leaving <span className="hot hot--danger">{lb(residual)}</span> still short</> : null}.
         </p>
         <p className="hint"><Check size={ICON_SM} aria-hidden style={{ verticalAlign: "-2px" }} /> No external action was taken.</p>
       </section>
-
       <section className="card">
-        <h2 className="sec">Before / after at the breach week</h2>
+        <h2 className="sec">Result at the breach week</h2>
         <div className="beforeafter">
-          <BA lab={`${catLabel} coverage`} before={`${beforeWos} weeks`} after={`${weeks(risk.target_weeks_of_supply)}`} good />
-          <BA lab="Ending inventory" before={lb(beforeInv)} after={lb(risk.target_end_inventory_lb)} good />
-          <BA lab="Gap to target" before={lb(risk.gap_to_target_lb)} after={lb(0)} good />
-          <BA lab="Budget remaining" before={usd(TOTAL_BUDGET)} after={usd(remaining)} />
+          <BA lab={`${catLabel} gap to target`} before={lb(gap)} after={lb(residual)} good={residual === 0} />
         </div>
         <p className="hint" style={{ marginTop: "var(--s4)" }}>
-          Simulated cost {usd(cost)} for {lb(qty)}.{" "}
-          {golden.projections.recommended_action_after.remaining_open_risk_ids.length === 0
-            ? "No category remains below its minimum in the four-week view."
-            : "Some risks remain open — see the comparison."}
+          Simulated cost {usd(cost)} for {lb(qty)} · budget remaining {usd(remaining)}.
+        </p>
+        <p className="hint">
+          {decision.reason ? `Manager reason: ${decision.reason.replace(/\.\s*$/, "")}. ` : ""}
+          The full four-week coverage projection for a non-recommended plan is computed by the deterministic engine.
+          {residual > 0 ? " Some risk remains open — see the comparison." : ""}
         </p>
       </section>
-
       {links}
     </div>
   );

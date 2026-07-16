@@ -7,7 +7,8 @@ import AppFrame from "../components/AppFrame";
 import NotFoundRun from "./NotFoundRun";
 import { getGolden, getActionMap } from "../lib/api";
 import { letterFromRunId } from "../lib/run";
-import { usd, int, pct, dateShort } from "../lib/format";
+import { useRunState } from "../lib/runState";
+import { usd, int, pct, dateShort, lb } from "../lib/format";
 import type { ComparisonPolicy } from "../types/golden";
 
 const ROWS: { key: string; label: string }[] = [
@@ -22,6 +23,12 @@ export default function Compare() {
   if (!letter) return <NotFoundRun />;
   const golden = getGolden(letter);
   const actions = getActionMap(golden.scenario_id);
+  const [runState] = useRunState(runId);
+  const sel = runState.selection;
+  const rec = golden.recommended_action;
+  const managerPlan = sel && (sel.actionId !== rec.action_id || sel.edited)
+    ? { name: actions[sel.actionId]?.display_name ?? sel.actionId, qty: sel.quantityLb, edited: sel.edited }
+    : null;
 
   const available = golden.decision_status === "READY_FOR_REVIEW" || golden.decision_status === "APPROVED";
 
@@ -32,6 +39,13 @@ export default function Compare() {
           <h1 className="risk-title" style={{ marginTop: 0 }}>Compare response policies</h1>
           <p className="note">Same frozen starting inventory — simulated and labeled as simulated.</p>
         </section>
+
+        {managerPlan && (
+          <div className="banner">
+            {managerPlan.edited ? "Manager-edited plan" : "Manager-selected alternative"}: <b>{managerPlan.name}</b> · {lb(managerPlan.qty)}.
+            Its comparison row is computed by the deterministic engine (not yet connected).
+          </div>
+        )}
 
         {!available ? (
           <section className="card">

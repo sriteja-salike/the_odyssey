@@ -1,11 +1,17 @@
-/* Audit (01 §3.3, §6.6): one chronological event surface for the run.
-   Uses the golden audit_oracle as the event stream (the real API will return
-   append-only run_events with the same ordering). */
+/* Audit (01 §3.3, §6.6): one chronological event surface; each row reveals a
+   details view with inputs/outputs, source IDs, and versions. Events + details
+   are derived from the golden (the API's audit oracle) until the real append-only
+   run_events endpoint exists. */
+import { useState } from "react";
 import { useParams } from "react-router-dom";
 import AppFrame from "../components/AppFrame";
 import NotFoundRun from "./NotFoundRun";
-import { getGolden } from "../lib/api";
+import { ChevronRight } from "../components/icons";
+import { getGolden, getOverlay } from "../lib/api";
 import { letterFromRunId } from "../lib/run";
+import { CATEGORY_LABEL } from "../lib/categories";
+import { lb, usd, weeks, wos, date, titleCase } from "../lib/format";
+import type { AuditEvent } from "../types/golden";
 
 const EVENT_LABEL: Record<string, string> = {
   RUN_CREATED: "Run created",
@@ -21,18 +27,34 @@ const EVENT_LABEL: Record<string, string> = {
 export default function Audit() {
   const { runId = "" } = useParams();
   const letter = letterFromRunId(runId);
+  const [open, setOpen] = useState<number | null>(null);
+
   if (!letter) return <NotFoundRun />;
   const golden = getGolden(letter);
   const events = golden.audit_oracle ?? [];
+  const v = golden as unknown as Record<string, string>;
 
   return (
     <AppFrame runId={runId} letter={letter} active="audit">
-      <div className="stack" style={{ maxWidth: 900 }}>
+      <div className="stack" style={{ maxWidth: 940 }}>
         <section>
           <h1 className="risk-title" style={{ marginTop: 0 }}>Audit record</h1>
           <p className="note">Append-only events for this run. Every displayed value traces to a source record.</p>
         </section>
+
         <section className="card">
+          <h2 className="sec">Versions</h2>
+          <div className="versions">
+            <span>Schema <b>{v.schema_version}</b></span>
+            <span>Data <b>{v.data_version}</b></span>
+            <span>Scenario <b>{v.scenario_version}</b></span>
+            <span>Golden <b>{v.golden_version}</b></span>
+            <span>Clock <b>{v.fixed_clock_utc}</b></span>
+          </div>
+        </section>
+
+        <section className="card">
+          <h2 className="sec">Events</h2>
           {events.length === 0 ? (
             <p>No events have been recorded for this run.</p>
           ) : (
@@ -42,16 +64,43 @@ export default function Audit() {
                   <th scope="col" className="num">#</th>
                   <th scope="col">Event</th>
                   <th scope="col">Reference</th>
+                  <th scope="col"><span className="visually-hidden">Details</span></th>
                 </tr>
               </thead>
               <tbody>
-                {events.map((e) => (
-                  <tr key={e.sequence}>
-                    <td className="num">{e.sequence}</td>
-                    <td style={{ fontWeight: 600 }}>{EVENT_LABEL[e.event_type] ?? e.event_type}</td>
-                    <td><a className="srcid" href="#">{e.semantic_id}</a></td>
-                  </tr>
-                ))}
+                {events.map((e) => {
+                  const isOpen = open === e.sequence;
+                  const detail = eventDetail(e, letter);
+                  return [
+                    <tr key={e.sequence}>
+                      <td className="num">{e.sequence}</td>
+                      <td style={{ fontWeight: 600 }}>{EVENT_LABEL[e.event_type] ?? e.event_type}</td>
+                      <td><span className="srcid">{e.semantic_id}</span></td>
+                      <td>
+                        <button
+                          className="audit-toggle"
+                          aria-expanded={isOpen}
+                          onClick={() => setOpen(isOpen ? null : e.sequence)}
+                        >
+                          <ChevronRight size={14} aria-hidden style={{ transform: isOpen ? "rotate(90deg)" : "none", transition: "transform .15s" }} />
+                          {isOpen ? "Hide" : "Details"}
+                        </button>
+                      </td>
+                    </tr>,
+                    isOpen ? (
+                      <tr key={`${e.sequence}-d`} className="audit-detail">
+                        <td />
+                        <td colSpan={3}>
+                          <dl className="audit-kv">
+                            {detail.map(([k, val]) => (
+                              <div key={k}><dt>{k}</dt><dd>{val}</dd></div>
+                            ))}
+                          </dl>
+                        </td>
+                      </tr>
+                    ) : null,
+                  ];
+                })}
               </tbody>
             </table>
           )}
@@ -59,4 +108,58 @@ export default function Audit() {
       </div>
     </AppFrame>
   );
+}
+
+/** Per-event inputs/outputs derived from the golden. */
+function eventDetail(e: AuditEvent, letter: Parameters<typeof getGolden>[0]): [string, string][] {
+  const golden = getGolden(letter);
+  const overlay = getOverlay(letter);
+  const risk = golden.risks.find((r) => r.is_primary) ?? golden.risks[0];
+  const rec = golden.recommended_action;
+  const mut = overlay.overlay.inbound_mutations[0];
+  const set = (mut?.set ?? {}) as { expected_week_start?: string; status?: string };
+
+  switch (e.event_type) {
+    case "RUN_CREATED":
+      return [["Scenario", overlay.display_name], ["Scenario ID", e.semantic_id], ["Mode", "Offline verified"]];
+    case "SCENARIO_VALIDATED":
+      return [["Data version", e.semantic_id], ["Result", "Fixtures validated against schema"]];
+    case "NOTICE_EXTRACTED":
+      return [
+        ["Source notice", e.semantic_id],
+        ["Extracted shipment", mut?.inbound_id ?? "—"],
+        ["Revised week", set.expected_week_start ? date(set.expected_week_start) : "—"],
+        ["Extracted status", set.status ? titleCase(set.status) : "—"],
+      ];
+    case "DISRUPTION_APPLIED":
+      return [
+        ["Inbound record", e.semantic_id],
+        ["New status", set.status ? titleCase(set.status) : "—"],
+        ["New arrival", set.expected_week_start ? date(set.expected_week_start) : "—"],
+      ];
+    case "RISK_DETECTED":
+      return [
+        ["Risk", e.semantic_id],
+        ["Category", risk ? CATEGORY_LABEL[risk.category_id] : "—"],
+        ["First breach", risk ? date(risk.first_breach_week_start) : "—"],
+        ["Coverage at breach", risk ? weeks(risk.conservative_end_wos_at_breach) : "—"],
+        ["Gap to target", risk ? lb(risk.gap_to_target_lb) : "—"],
+        ["Priority score", risk ? wos(risk.priority_score) : "—"],
+      ];
+    case "RECOMMENDATION_PREPARED":
+      return [
+        ["Recommendation", e.semantic_id],
+        ["Action", rec.action_id],
+        ["Quantity", lb(rec.requested_quantity_lb)],
+        ["Simulated cost", usd(rec.cost_usd)],
+        ["Confidence", titleCase(rec.confidence)],
+        ["Source records", rec.source_ids.join(", ")],
+      ];
+    case "MANAGER_APPROVED":
+      return [["Approved evaluation", e.semantic_id], ["Authority", "Human manager (required)"]];
+    case "SIMULATED_ACTION_APPLIED":
+      return [["Applied action", e.semantic_id], ["Effect", "Projection recomputed in simulation only"]];
+    default:
+      return [["Reference", e.semantic_id]];
+  }
 }
