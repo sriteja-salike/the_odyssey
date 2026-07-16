@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nourishops.local/schemas/scenario_overlay.schema.json",
+  "title": "Deterministic scenario overlay",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "data_version", "scenario_id", "scenario_version", "seed",
+    "display_name", "planning_date", "forecast_week_starts", "primary_risk_type",
+    "provenance", "overlay", "active_offer_ids", "enabled_action_ids", "active_evidence_ids",
+    "cached_notice_extraction"
+  ],
+  "properties": {
+    "schema_version": {"$ref": "common.schema.json#/$defs/schemaVersion"},
+    "data_version": {"$ref": "common.schema.json#/$defs/dataVersion"},
+    "scenario_id": {"type": "string", "pattern": "^SCN-[A-E]-[A-Z0-9_-]+$"},
+    "scenario_version": {"type": "string", "pattern": "^scenario-[a-e]/1\\.0\\.0$"},
+    "seed": {"const": 20260713},
+    "display_name": {"type": "string", "minLength": 1},
+    "planning_date": {"const": "2026-08-03"},
+    "forecast_week_starts": {
+      "const": ["2026-08-03", "2026-08-10", "2026-08-17", "2026-08-24"]
+    },
+    "primary_risk_type": {"$ref": "common.schema.json#/$defs/riskType"},
+    "provenance": {"$ref": "common.schema.json#/$defs/provenance"},
+    "overlay": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["remove_inbound_ids", "inbound_mutations", "warehouse_overrides"],
+      "properties": {
+        "remove_inbound_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^INB-[A-Z0-9_-]+$"}
+        },
+        "inbound_mutations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["inbound_id", "set"],
+            "properties": {
+              "inbound_id": {"type": "string", "pattern": "^INB-[A-Z0-9_-]+$"},
+              "set": {
+                "type": "object",
+                "minProperties": 1,
+                "additionalProperties": false,
+                "properties": {
+                  "expected_week_start": {"type": ["string", "null"], "format": "date"},
+                  "gross_quantity_lb": {"$ref": "common.schema.json#/$defs/nullableNonnegativePounds"},
+                  "status": {"$ref": "common.schema.json#/$defs/inboundStatus"},
+                  "arrival_probability": {"$ref": "common.schema.json#/$defs/probability"},
+                  "usable_life_days": {"type": ["integer", "null"], "minimum": 0}
+                }
+              }
+            }
+          }
+        },
+        "warehouse_overrides": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "planning_budget_usd": {"type": "number", "minimum": 0, "multipleOf": 0.01},
+            "capacity_lb": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "DRY": {"type": "integer", "minimum": 1},
+                "REFRIGERATED": {"type": "integer", "minimum": 1},
+                "FROZEN": {"type": "integer", "minimum": 1}
+              }
+            }
+          }
+        }
+      }
+    },
+    "enabled_action_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^ACT-[A-E]-[A-Z0-9_-]+$"}
+    },
+    "active_offer_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^OFFER-[B-C]-[A-Z0-9_-]+$"}
+    },
+    "active_evidence_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^EVD-[A-Z0-9_-]+$"}
+    },
+    "cached_notice_extraction": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["inbound_id", "previous_week_start", "revised_week_start", "status"],
+      "properties": {
+        "inbound_id": {"type": "string"},
+        "previous_week_start": {"type": "string", "format": "date"},
+        "revised_week_start": {"type": "string", "format": "date"},
+        "status": {"enum": ["CONFIRMED", "PROBABLE", "UNCONFIRMED"]}
+      }
+    }
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nourishops.local/schemas/historical_weekly_category_flow.schema.json",
+  "title": "Six-category, 16-week historical flow matrix",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "data_version", "fixture_id", "record_id_template",
+    "week_starts", "provenance", "series"
+  ],
+  "properties": {
+    "schema_version": {"$ref": "common.schema.json#/$defs/schemaVersion"},
+    "data_version": {"$ref": "common.schema.json#/$defs/dataVersion"},
+    "fixture_id": {"const": "FIXTURE-HISTORICAL-FLOW"},
+    "record_id_template": {"const": "FLOW-{YYYYMMDD}-{CATEGORY_ID}"},
+    "week_starts": {
+      "type": "array",
+      "minItems": 16,
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": {"$ref": "common.schema.json#/$defs/weekStart"}
+    },
+    "provenance": {"$ref": "common.schema.json#/$defs/provenance"},
+    "series": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "category_id", "warehouse_id", "beginning_inventory_lb",
+          "donated_inbound_lb", "usda_inbound_lb", "purchased_inbound_lb",
+          "transfer_inbound_lb", "distributed_lb", "spoilage_lb",
+          "unmet_distribution_lb", "ending_inventory_lb", "record_version",
+          "provenance_id"
+        ],
+        "properties": {
+          "category_id": {"$ref": "common.schema.json#/$defs/categoryId"},
+          "warehouse_id": {"const": "WH-CENTRAL-01"},
+          "beginning_inventory_lb": {"$ref": "#/$defs/vector16"},
+          "donated_inbound_lb": {"$ref": "#/$defs/vector16"},
+          "usda_inbound_lb": {"$ref": "#/$defs/vector16"},
+          "purchased_inbound_lb": {"$ref": "#/$defs/vector16"},
+          "transfer_inbound_lb": {"$ref": "#/$defs/vector16"},
+          "distributed_lb": {"$ref": "#/$defs/vector16"},
+          "spoilage_lb": {"$ref": "#/$defs/vector16"},
+          "unmet_distribution_lb": {"$ref": "#/$defs/vector16"},
+          "ending_inventory_lb": {"$ref": "#/$defs/vector16"},
+          "record_version": {"$ref": "common.schema.json#/$defs/recordVersion"},
+          "provenance_id": {"const": "PROV-SYNTHETIC-HISTORY"}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "vector16": {
+      "type": "array",
+      "minItems": 16,
+      "maxItems": 16,
+      "items": {"$ref": "common.schema.json#/$defs/nonnegativePounds"}
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "schema_version": "data-contract/1.0.0",
+  "data_version": "synthetic-base/1.0.0",
+  "fixture_id": "FIXTURE-WAREHOUSE",
+  "provenance": {
+    "mode": "SYNTHETIC",
+    "created_by": "NourishOps build-context team",
+    "description": "One fictional warehouse with deliberately bounded budget and storage capacities."
+  },
+  "record": {
+    "warehouse_id": "WH-CENTRAL-01",
+    "display_name": "Synthetic Central Warehouse",
+    "planning_budget_usd": 20000.00,
+    "capacity_lb": {
+      "DRY": 150000,
+      "REFRIGERATED": 40000,
+      "FROZEN": 50000
+    },
+    "planning_horizon_weeks": 4,
+    "probable_status_probability": 0.65,
+    "minimum_pickup_lb": 1000,
+    "record_version": 1,
+    "provenance_id": "PROV-SYNTHETIC-WAREHOUSE"
+  }
+}

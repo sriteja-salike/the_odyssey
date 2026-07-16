@@ -1,0 +1,36 @@
+{
+  "schema_version": "data-contract/1.0.0",
+  "data_version": "synthetic-base/1.0.0",
+  "scenario_id": "SCN-B-SHORT-LIFE-PRODUCE",
+  "scenario_version": "scenario-b/1.0.0",
+  "seed": 20260713,
+  "display_name": "Large short-life produce offer",
+  "planning_date": "2026-08-03",
+  "forecast_week_starts": ["2026-08-03", "2026-08-10", "2026-08-17", "2026-08-24"],
+  "primary_risk_type": "SHORT_LIFE_CAPACITY",
+  "provenance": {
+    "mode": "SYNTHETIC",
+    "created_by": "NourishOps build-context team",
+    "description": "Produce offer overlay that replaces the ordinary week-one produce receipt.",
+    "derived_from_ids": ["INB-DONATION-PRODUCE-201", "EVD-B-PRODUCE-OFFER"]
+  },
+  "overlay": {
+    "remove_inbound_ids": ["INB-DONATION-PRODUCE-201"],
+    "inbound_mutations": [],
+    "warehouse_overrides": {}
+  },
+  "active_offer_ids": ["OFFER-B-PRODUCE-20000"],
+  "enabled_action_ids": [
+    "ACT-B-PARTIAL-PRODUCE-10000",
+    "ACT-B-ACCEPT-PRODUCE-20000",
+    "ACT-B-REDIRECT-PRODUCE-20000",
+    "ACT-B-DECLINE-PRODUCE-20000",
+    "ACT-B-MONITOR"
+  ],
+  "active_evidence_ids": [
+    "EVD-BASE-INBOUND-LEDGER",
+    "EVD-B-PRODUCE-OFFER",
+    "EVD-B-PEER-REDIRECT"
+  ],
+  "cached_notice_extraction": null
+}

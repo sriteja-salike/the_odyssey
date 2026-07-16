@@ -1,0 +1,48 @@
+{
+  "schema_version": "data-contract/1.0.0",
+  "data_version": "synthetic-base/1.0.0",
+  "scenario_id": "SCN-D-BUDGET-TRADEOFF",
+  "scenario_version": "scenario-d/1.0.0",
+  "seed": 20260713,
+  "display_name": "Protein and dairy budget trade-off",
+  "planning_date": "2026-08-03",
+  "forecast_week_starts": ["2026-08-03", "2026-08-10", "2026-08-17", "2026-08-24"],
+  "primary_risk_type": "BUDGET_TRADEOFF",
+  "provenance": {
+    "mode": "SYNTHETIC",
+    "created_by": "NourishOps build-context team",
+    "description": "Two shortage risks with a budget that permits either catalog purchase but not both.",
+    "derived_from_ids": ["INB-USDA-PROTEIN-104", "INB-USDA-DAIRY-301", "EVD-D-BUDGET-NOTE", "EVD-D-CAPACITY-NOTE"]
+  },
+  "overlay": {
+    "remove_inbound_ids": ["INB-USDA-DAIRY-301"],
+    "inbound_mutations": [
+      {
+        "inbound_id": "INB-USDA-PROTEIN-104",
+        "set": {
+          "expected_week_start": "2026-08-17",
+          "status": "PROBABLE",
+          "arrival_probability": 0.65
+        }
+      }
+    ],
+    "warehouse_overrides": {
+      "planning_budget_usd": 13000.00,
+      "capacity_lb": {"REFRIGERATED": 45000}
+    }
+  },
+  "active_offer_ids": [],
+  "enabled_action_ids": [
+    "ACT-D-PURCHASE-PROTEIN-15000",
+    "ACT-D-PURCHASE-DAIRY-6000",
+    "ACT-D-MONITOR"
+  ],
+  "active_evidence_ids": [
+    "EVD-BASE-INBOUND-LEDGER",
+    "EVD-D-VENDOR-PROTEIN",
+    "EVD-D-VENDOR-DAIRY",
+    "EVD-D-BUDGET-NOTE",
+    "EVD-D-CAPACITY-NOTE"
+  ],
+  "cached_notice_extraction": null
+}

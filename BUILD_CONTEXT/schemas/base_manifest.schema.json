@@ -1,0 +1,21 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://nourishops.local/schemas/base_manifest.schema.json",
+  "title":"NourishOps contract asset manifest",
+  "type":"object",
+  "additionalProperties":false,
+  "required":["schema_version","data_version","golden_version","seed","warehouse_id","historical_week_starts","forecast_week_starts","assets","scenario_ids","hash_policy","provenance"],
+  "properties":{
+    "schema_version":{"$ref":"common.schema.json#/$defs/schemaVersion"},
+    "data_version":{"$ref":"common.schema.json#/$defs/dataVersion"},
+    "golden_version":{"const":"golden/1.0.0"},
+    "seed":{"const":20260713},
+    "warehouse_id":{"const":"WH-CENTRAL-01"},
+    "historical_week_starts":{"type":"array","minItems":16,"maxItems":16,"items":{"type":"string","format":"date"}},
+    "forecast_week_starts":{"const":["2026-08-03","2026-08-10","2026-08-17","2026-08-24"]},
+    "assets":{"type":"array","minItems":12,"items":{"type":"object","additionalProperties":false,"required":["path","role","record_count"],"properties":{"path":{"type":"string","minLength":1},"role":{"enum":["BASE_FIXTURE","SCENARIO_OVERLAY","GOLDEN_ORACLE"]},"record_count":{"type":"integer","minimum":1}}}},
+    "scenario_ids":{"const":["SCN-A-USDA-PROTEIN-DELAY","SCN-B-SHORT-LIFE-PRODUCE","SCN-C-SNACK-MISMATCH","SCN-D-BUDGET-TRADEOFF","SCN-E-DATA-CONFLICT"]},
+    "hash_policy":{"const":"RUNTIME_SHA256_OF_CANONICAL_JSON"},
+    "provenance":{"$ref":"common.schema.json#/$defs/provenance"}
+  }
+}

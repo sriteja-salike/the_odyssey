@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nourishops.local/schemas/candidate_actions.schema.json",
+  "title": "Scenario action catalog fixture",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "data_version", "fixture_id", "provenance", "records"],
+  "properties": {
+    "schema_version": {"$ref": "common.schema.json#/$defs/schemaVersion"},
+    "data_version": {"$ref": "common.schema.json#/$defs/dataVersion"},
+    "fixture_id": {"const": "FIXTURE-CANDIDATE-ACTIONS"},
+    "provenance": {"$ref": "common.schema.json#/$defs/provenance"},
+    "records": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/actionRecord"}
+    }
+  },
+  "$defs": {
+    "actionRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action_id", "scenario_id", "display_name", "action_type", "category_id",
+        "subject_record_id", "requested_quantity_lb", "minimum_quantity_lb",
+        "maximum_quantity_lb", "quantity_increment_lb", "unit_price_usd_per_lb",
+        "fixed_cost_usd", "computed_cost_usd", "lead_time_days",
+        "arrival_week_start", "success_probability", "expected_usable_yield_ratio",
+        "usable_life_days", "storage_type", "operational_burden",
+        "synthetic_destination_id", "requires_human_approval", "evidence_ids",
+        "record_version", "provenance_id"
+      ],
+      "properties": {
+        "action_id": {"type": "string", "pattern": "^ACT-[A-E]-[A-Z0-9_-]+$"},
+        "scenario_id": {"type": "string", "pattern": "^SCN-[A-E]-[A-Z0-9_-]+$"},
+        "display_name": {"type": "string", "minLength": 1},
+        "action_type": {"$ref": "common.schema.json#/$defs/actionType"},
+        "category_id": {"type": ["string", "null"], "enum": ["PROTEIN", "PRODUCE", "DAIRY", "GRAINS", "STAPLES_MIXED_MEALS", "SNACKS_DISCRETIONARY", null]},
+        "subject_record_id": {"type": ["string", "null"]},
+        "requested_quantity_lb": {"$ref": "common.schema.json#/$defs/nonnegativePounds"},
+        "minimum_quantity_lb": {"$ref": "common.schema.json#/$defs/nonnegativePounds"},
+        "maximum_quantity_lb": {"$ref": "common.schema.json#/$defs/nonnegativePounds"},
+        "quantity_increment_lb": {"type": "integer", "minimum": 1},
+        "unit_price_usd_per_lb": {"type": ["number", "null"], "minimum": 0, "multipleOf": 0.01},
+        "fixed_cost_usd": {"type": "number", "minimum": 0, "multipleOf": 0.01},
+        "computed_cost_usd": {"type": "number", "minimum": 0, "multipleOf": 0.01},
+        "lead_time_days": {"type": "integer", "minimum": 0},
+        "arrival_week_start": {"type": ["string", "null"], "format": "date"},
+        "success_probability": {"type": "number", "minimum": 0, "maximum": 1},
+        "expected_usable_yield_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+        "usable_life_days": {"type": ["integer", "null"], "minimum": 0},
+        "storage_type": {"$ref": "common.schema.json#/$defs/storageType"},
+        "operational_burden": {"$ref": "common.schema.json#/$defs/operationalBurden"},
+        "synthetic_destination_id": {"type": ["string", "null"]},
+        "requires_human_approval": {"const": true},
+        "evidence_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^EVD-[A-Z0-9_-]+$"}
+        },
+        "record_version": {"$ref": "common.schema.json#/$defs/recordVersion"},
+        "provenance_id": {"const": "PROV-SYNTHETIC-ACTION-CATALOG"}
+      }
+    }
+  }
+}

@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nourishops.local/schemas/evidence_records.schema.json",
+  "title": "Synthetic evidence fixture",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "data_version", "fixture_id", "provenance", "records"],
+  "properties": {
+    "schema_version": {"$ref": "common.schema.json#/$defs/schemaVersion"},
+    "data_version": {"$ref": "common.schema.json#/$defs/dataVersion"},
+    "fixture_id": {"const": "FIXTURE-EVIDENCE"},
+    "provenance": {"$ref": "common.schema.json#/$defs/provenance"},
+    "records": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "evidence_id", "scenario_ids", "source_kind", "trust_level", "title",
+          "body", "recorded_at", "related_record_ids", "structured_facts",
+          "contains_instruction_like_text", "record_version", "provenance_id"
+        ],
+        "properties": {
+          "evidence_id": {"type": "string", "pattern": "^EVD-[A-Z0-9_-]+$"},
+          "scenario_ids": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {"type": "string", "pattern": "^SCN-[A-E]-[A-Z0-9_-]+$"}
+          },
+          "source_kind": {
+            "enum": [
+              "SYNTHETIC_LEDGER", "SYNTHETIC_POLICY", "SYNTHETIC_NOTICE",
+              "SYNTHETIC_VENDOR_QUOTE", "SYNTHETIC_PEER_OFFER",
+              "SYNTHETIC_DONOR_OFFER", "SYNTHETIC_STAFF_NOTE"
+            ]
+          },
+          "trust_level": {"enum": ["TRUSTED_STRUCTURED", "UNTRUSTED_TEXT"]},
+          "title": {"type": "string", "minLength": 1},
+          "body": {"type": "string", "minLength": 1},
+          "recorded_at": {"type": "string", "format": "date-time"},
+          "related_record_ids": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "structured_facts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["field", "value", "unit"],
+              "properties": {
+                "field": {"type": "string", "minLength": 1},
+                "value": {},
+                "unit": {"type": ["string", "null"]}
+              }
+            }
+          },
+          "contains_instruction_like_text": {"type": "boolean"},
+          "record_version": {"$ref": "common.schema.json#/$defs/recordVersion"},
+          "provenance_id": {"const": "PROV-SYNTHETIC-EVIDENCE"}
+        }
+      }
+    }
+  }
+}

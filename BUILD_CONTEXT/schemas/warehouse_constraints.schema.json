@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nourishops.local/schemas/warehouse_constraints.schema.json",
+  "title": "Warehouse and resource constraint fixture",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "data_version", "fixture_id", "provenance", "record"],
+  "properties": {
+    "schema_version": {"$ref": "common.schema.json#/$defs/schemaVersion"},
+    "data_version": {"$ref": "common.schema.json#/$defs/dataVersion"},
+    "fixture_id": {"const": "FIXTURE-WAREHOUSE"},
+    "provenance": {"$ref": "common.schema.json#/$defs/provenance"},
+    "record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "warehouse_id", "display_name", "planning_budget_usd",
+        "capacity_lb", "planning_horizon_weeks", "probable_status_probability",
+        "minimum_pickup_lb", "record_version", "provenance_id"
+      ],
+      "properties": {
+        "warehouse_id": {"const": "WH-CENTRAL-01"},
+        "display_name": {"const": "Synthetic Central Warehouse"},
+        "planning_budget_usd": {"type": "number", "minimum": 0, "multipleOf": 0.01},
+        "capacity_lb": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["DRY", "REFRIGERATED", "FROZEN"],
+          "properties": {
+            "DRY": {"type": "integer", "minimum": 1},
+            "REFRIGERATED": {"type": "integer", "minimum": 1},
+            "FROZEN": {"type": "integer", "minimum": 1}
+          }
+        },
+        "planning_horizon_weeks": {"const": 4},
+        "probable_status_probability": {"const": 0.65},
+        "minimum_pickup_lb": {"type": "integer", "minimum": 0},
+        "record_version": {"$ref": "common.schema.json#/$defs/recordVersion"},
+        "provenance_id": {"const": "PROV-SYNTHETIC-WAREHOUSE"}
+      }
+    }
+  }
+}

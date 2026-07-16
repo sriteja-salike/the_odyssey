@@ -1,0 +1,747 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nourishops.local/schemas/golden_output.schema.json",
+  "title": "Immutable scenario oracle",
+  "$defs": {
+    "decimalString": {
+      "type": "string",
+      "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+    },
+    "stringArray": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    },
+    "decimal4": {
+      "type": "array", "minItems": 4, "maxItems": 4,
+      "items": {"$ref": "#/$defs/decimalString"}
+    },
+    "integer4": {
+      "type": "array", "minItems": 4, "maxItems": 4,
+      "items": {"type": "integer"}
+    },
+    "weekProjectionRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["week_start", "ending_inventory_lb", "end_wos"],
+      "properties": {
+        "week_start": {"$ref": "common.schema.json#/$defs/weekStart"},
+        "beginning_inventory_lb": {"$ref": "#/$defs/decimalString"},
+        "confirmed_inbound_lb": {"$ref": "#/$defs/decimalString"},
+        "probable_inbound_lb": {"$ref": "#/$defs/decimalString"},
+        "probability_adjusted_inbound_lb": {"$ref": "#/$defs/decimalString"},
+        "fulfilled_distribution_lb": {"$ref": "#/$defs/decimalString"},
+        "unmet_distribution_lb": {"$ref": "#/$defs/decimalString"},
+        "expiry_spoilage_lb": {"$ref": "#/$defs/decimalString"},
+        "ending_inventory_lb": {"$ref": "#/$defs/decimalString"},
+        "end_wos": {"$ref": "#/$defs/decimalString"}
+      }
+    },
+    "weekProjectionRows4": {
+      "type": "array", "minItems": 4, "maxItems": 4,
+      "items": {"$ref": "#/$defs/weekProjectionRow"}
+    },
+    "endingWosSeries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ending_inventory_lb", "end_wos"],
+      "properties": {
+        "ending_inventory_lb": {"$ref": "#/$defs/integer4"},
+        "end_wos": {"$ref": "#/$defs/decimal4"}
+      }
+    },
+    "dualInventorySeries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["conservative_ending_inventory_lb", "expected_ending_inventory_lb"],
+      "properties": {
+        "conservative_ending_inventory_lb": {"$ref": "#/$defs/integer4"},
+        "expected_ending_inventory_lb": {"$ref": "#/$defs/integer4"}
+      }
+    },
+    "allCategoryInventory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["PROTEIN", "PRODUCE", "DAIRY", "GRAINS", "STAPLES_MIXED_MEALS", "SNACKS_DISCRETIONARY"],
+      "properties": {
+        "PROTEIN": {"$ref": "#/$defs/integer4"},
+        "PRODUCE": {"$ref": "#/$defs/integer4"},
+        "DAIRY": {"$ref": "#/$defs/integer4"},
+        "GRAINS": {"$ref": "#/$defs/integer4"},
+        "STAPLES_MIXED_MEALS": {"$ref": "#/$defs/integer4"},
+        "SNACKS_DISCRETIONARY": {"$ref": "#/$defs/integer4"}
+      }
+    },
+    "scoreComponents": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["R", "M", "T", "P", "E", "S"],
+      "properties": {
+        "R": {"$ref": "#/$defs/decimalString"},
+        "M": {"$ref": "#/$defs/decimalString"},
+        "T": {"$ref": "#/$defs/decimalString"},
+        "P": {"$ref": "#/$defs/decimalString"},
+        "E": {"$ref": "#/$defs/decimalString"},
+        "S": {"$ref": "#/$defs/decimalString"}
+      }
+    },
+    "failedConstraint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "observed", "limit", "unit"],
+      "properties": {
+        "code": {"type": "string", "minLength": 1},
+        "observed": {},
+        "limit": {},
+        "unit": {"type": "string", "minLength": 1}
+      }
+    },
+    "actionEvaluation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evaluated_action_id", "action_id", "requested_quantity_lb", "cost_usd",
+        "feasible", "failed_constraint_codes", "score_components",
+        "score_unrounded", "score_display", "rank"
+      ],
+      "properties": {
+        "evaluated_action_id": {"type": "string", "pattern": "^EVAL-ACT-[A-Z0-9_-]+-[0-9]+$"},
+        "action_id": {"type": "string", "pattern": "^ACT-[A-Z0-9_-]+$"},
+        "requested_quantity_lb": {"type": "integer", "minimum": 0},
+        "cost_usd": {"$ref": "#/$defs/decimalString"},
+        "feasible": {"type": "boolean"},
+        "failed_constraint_codes": {"$ref": "#/$defs/stringArray"},
+        "failed_constraints": {"type": "array", "items": {"$ref": "#/$defs/failedConstraint"}},
+        "score_components": {"oneOf": [{"$ref": "#/$defs/scoreComponents"}, {"type": "null"}]},
+        "score_unrounded": {"oneOf": [{"$ref": "#/$defs/decimalString"}, {"type": "null"}]},
+        "score_display": {"oneOf": [{"$ref": "#/$defs/decimalString"}, {"type": "null"}]},
+        "rank": {"type": ["integer", "null"], "minimum": 1},
+        "evidence_ids": {"$ref": "#/$defs/stringArray"},
+        "expected_usable_quantity_lb": {"$ref": "#/$defs/decimalString"},
+        "expected_useful_disposition_lb": {"$ref": "#/$defs/decimalString"},
+        "gap_reduction_lb": {"$ref": "#/$defs/decimalString"},
+        "mission_note": {"type": "string", "minLength": 1},
+        "safe_quantity_basis": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["storage_headroom_lb", "maximum_zero_spoilage_throughput_lb"],
+          "properties": {
+            "storage_headroom_lb": {"$ref": "#/$defs/decimalString"},
+            "maximum_zero_spoilage_throughput_lb": {"$ref": "#/$defs/decimalString"}
+          }
+        },
+        "coverage_gain": {"$ref": "#/$defs/decimalString"},
+        "unresolved_risk_ids": {"$ref": "#/$defs/stringArray"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"feasible": {"const": true}}, "required": ["feasible"]},
+          "then": {
+            "properties": {
+              "failed_constraint_codes": {"maxItems": 0},
+              "score_components": {"$ref": "#/$defs/scoreComponents"},
+              "score_unrounded": {"$ref": "#/$defs/decimalString"},
+              "score_display": {"$ref": "#/$defs/decimalString"},
+              "rank": {"type": "integer", "minimum": 1}
+            }
+          },
+          "else": {
+            "properties": {
+              "failed_constraint_codes": {"minItems": 1},
+              "score_components": {"type": "null"},
+              "score_unrounded": {"type": "null"},
+              "score_display": {"type": "null"},
+              "rank": {"type": "null"}
+            }
+          }
+        }
+      ]
+    },
+    "risk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["risk_id", "risk_type", "category_id", "is_primary", "priority_score"],
+      "properties": {
+        "risk_id": {"type": "string", "pattern": "^RISK-[A-E]-[A-Z0-9_-]+$"},
+        "risk_type": {"$ref": "common.schema.json#/$defs/riskType"},
+        "category_id": {"oneOf": [{"$ref": "common.schema.json#/$defs/categoryId"}, {"type": "null"}]},
+        "is_primary": {"type": "boolean"},
+        "priority_score": {"$ref": "#/$defs/decimalString"},
+        "evidence_ids": {"$ref": "#/$defs/stringArray"},
+        "finding_ids": {"$ref": "#/$defs/stringArray"},
+        "first_breach_week_start": {"$ref": "common.schema.json#/$defs/weekStart"},
+        "first_breach_week_index": {"type": "integer", "minimum": 1, "maximum": 4},
+        "minimum_weeks_of_supply": {"$ref": "#/$defs/decimalString"},
+        "target_weeks_of_supply": {"$ref": "#/$defs/decimalString"},
+        "conservative_end_inventory_lb_at_breach": {"$ref": "#/$defs/decimalString"},
+        "conservative_end_wos_at_breach": {"$ref": "#/$defs/decimalString"},
+        "target_end_inventory_lb": {"$ref": "#/$defs/decimalString"},
+        "gap_to_target_lb": {"$ref": "#/$defs/decimalString"},
+        "shortage_depth": {"$ref": "#/$defs/decimalString"},
+        "offer_id": {"type": "string", "pattern": "^OFFER-[A-Z0-9_-]+$"},
+        "full_accept_peak_refrigerated_lb": {"$ref": "#/$defs/decimalString"},
+        "refrigerated_capacity_lb": {"$ref": "#/$defs/decimalString"},
+        "overflow_lb": {"$ref": "#/$defs/decimalString"},
+        "full_accept_expiry_spoilage_lb": {"$ref": "#/$defs/decimalString"},
+        "expected_usable_offer_lb": {"$ref": "#/$defs/decimalString"},
+        "spoilage_rate": {"$ref": "#/$defs/decimalString"},
+        "offered_gross_lb": {"$ref": "#/$defs/decimalString"},
+        "offered_category_target_inventory_lb": {"$ref": "#/$defs/decimalString"},
+        "mismatch_ratio": {"$ref": "#/$defs/decimalString"},
+        "essential_categories_below_target": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["category_id", "conservative_end_wos_by_week", "target_wos"],
+            "properties": {
+              "category_id": {"$ref": "common.schema.json#/$defs/categoryId"},
+              "conservative_end_wos_by_week": {"type": "array", "minItems": 4, "maxItems": 4, "items": {"$ref": "#/$defs/decimalString"}},
+              "target_wos": {"$ref": "#/$defs/decimalString"}
+            }
+          }
+        },
+        "component_risk_ids": {"$ref": "#/$defs/stringArray"},
+        "remaining_budget_usd": {"$ref": "#/$defs/decimalString"},
+        "cheapest_individually_feasible_costs_usd": {
+          "type": "object",
+          "additionalProperties": {"$ref": "#/$defs/decimalString"}
+        },
+        "required_combined_cost_usd": {"$ref": "#/$defs/decimalString"},
+        "budget_shortfall_usd": {"$ref": "#/$defs/decimalString"},
+        "budget_shortfall_ratio": {"$ref": "#/$defs/decimalString"}
+      }
+    },
+    "confidenceInputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action_reliability", "data_quality", "forecast_stability", "evidence_completeness", "rank_margin"],
+      "properties": {
+        "action_reliability": {"$ref": "#/$defs/decimalString"},
+        "data_quality": {"$ref": "#/$defs/decimalString"},
+        "forecast_stability": {"$ref": "#/$defs/decimalString"},
+        "evidence_completeness": {"$ref": "#/$defs/decimalString"},
+        "rank_margin": {"$ref": "#/$defs/decimalString"}
+      }
+    },
+    "recommendation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recommendation_id", "risk_id", "action_id", "evaluated_action_id",
+        "requested_quantity_lb", "arrival_week_start", "cost_usd",
+        "requires_human_approval", "confidence_value", "confidence",
+        "confidence_inputs", "source_ids"
+      ],
+      "properties": {
+        "recommendation_id": {"type": "string", "pattern": "^REC-[A-D]-[0-9]{3}$"},
+        "risk_id": {"type": "string", "pattern": "^RISK-[A-D]-[A-Z0-9_-]+$"},
+        "action_id": {"type": "string", "pattern": "^ACT-[A-Z0-9_-]+$"},
+        "evaluated_action_id": {"type": "string", "pattern": "^EVAL-ACT-[A-Z0-9_-]+-[0-9]+$"},
+        "requested_quantity_lb": {"type": "integer", "minimum": 0},
+        "arrival_week_start": {"oneOf": [{"$ref": "common.schema.json#/$defs/weekStart"}, {"type": "null"}]},
+        "unit_price_usd_per_lb": {"$ref": "#/$defs/decimalString"},
+        "cost_usd": {"$ref": "#/$defs/decimalString"},
+        "expected_usable_quantity_lb": {"$ref": "#/$defs/decimalString"},
+        "expected_useful_disposition_lb": {"$ref": "#/$defs/decimalString"},
+        "gap_reduction_lb": {"$ref": "#/$defs/decimalString"},
+        "synthetic_destination_id": {"type": "string", "minLength": 1},
+        "requires_human_approval": {"const": true},
+        "confidence_value": {"$ref": "#/$defs/decimalString"},
+        "confidence": {"enum": ["HIGH", "MEDIUM", "LOW"]},
+        "confidence_inputs": {"$ref": "#/$defs/confidenceInputs"},
+        "tradeoff_explanation": {"type": "string", "minLength": 1},
+        "source_ids": {"$ref": "#/$defs/stringArray"}
+      }
+    },
+    "projectionsA": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["baseline", "recommended_action_after"],
+      "properties": {
+        "baseline": {
+          "type": "object", "additionalProperties": false,
+          "required": [
+            "PROTEIN", "all_category_conservative_ending_inventory_lb",
+            "conservative_weighted_coverage_by_week", "expected_weighted_coverage_by_week",
+            "horizon_conservative_weighted_coverage", "horizon_expected_weighted_coverage",
+            "capacity_stress_frozen_peak_lb_by_week", "maximum_capacity_stress_frozen_peak_lb"
+          ],
+          "properties": {
+            "PROTEIN": {
+              "type": "object", "additionalProperties": false,
+              "required": ["conservative", "expected"],
+              "properties": {
+                "conservative": {"$ref": "#/$defs/weekProjectionRows4"},
+                "expected": {"$ref": "#/$defs/weekProjectionRows4"}
+              }
+            },
+            "all_category_conservative_ending_inventory_lb": {"$ref": "#/$defs/allCategoryInventory"},
+            "conservative_weighted_coverage_by_week": {"$ref": "#/$defs/decimal4"},
+            "expected_weighted_coverage_by_week": {"$ref": "#/$defs/decimal4"},
+            "horizon_conservative_weighted_coverage": {"$ref": "#/$defs/decimalString"},
+            "horizon_expected_weighted_coverage": {"$ref": "#/$defs/decimalString"},
+            "capacity_stress_frozen_peak_lb_by_week": {"$ref": "#/$defs/decimal4"},
+            "maximum_capacity_stress_frozen_peak_lb": {"$ref": "#/$defs/decimalString"}
+          }
+        },
+        "recommended_action_after": {
+          "type": "object", "additionalProperties": false,
+          "required": [
+            "action_id", "PROTEIN", "horizon_conservative_weighted_coverage",
+            "horizon_expected_weighted_coverage", "capacity_stress_frozen_peak_lb_by_week",
+            "maximum_capacity_stress_frozen_peak_lb", "remaining_budget_usd", "remaining_open_risk_ids"
+          ],
+          "properties": {
+            "action_id": {"type": "string", "pattern": "^ACT-A-[A-Z0-9_-]+$"},
+            "PROTEIN": {
+              "type": "object", "additionalProperties": false,
+              "required": ["conservative_ending_inventory_lb", "conservative_end_wos", "expected_ending_inventory_lb", "expected_end_wos"],
+              "properties": {
+                "conservative_ending_inventory_lb": {"$ref": "#/$defs/decimal4"},
+                "conservative_end_wos": {"$ref": "#/$defs/decimal4"},
+                "expected_ending_inventory_lb": {"$ref": "#/$defs/decimal4"},
+                "expected_end_wos": {"$ref": "#/$defs/decimal4"}
+              }
+            },
+            "horizon_conservative_weighted_coverage": {"$ref": "#/$defs/decimalString"},
+            "horizon_expected_weighted_coverage": {"$ref": "#/$defs/decimalString"},
+            "capacity_stress_frozen_peak_lb_by_week": {"$ref": "#/$defs/decimal4"},
+            "maximum_capacity_stress_frozen_peak_lb": {"$ref": "#/$defs/decimalString"},
+            "remaining_budget_usd": {"$ref": "#/$defs/decimalString"},
+            "remaining_open_risk_ids": {"$ref": "#/$defs/stringArray"}
+          }
+        }
+      }
+    },
+    "projectionsB": {
+      "type": "object", "additionalProperties": false,
+      "required": ["baseline", "full_accept_reference", "recommended_action_after"],
+      "properties": {
+        "baseline": {
+          "type": "object", "additionalProperties": false,
+          "required": ["PRODUCE", "horizon_conservative_weighted_coverage", "horizon_expected_weighted_coverage", "refrigerated_peak_lb_by_week", "incremental_offer_expiry_spoilage_lb"],
+          "properties": {
+            "PRODUCE": {
+              "type": "object", "additionalProperties": false,
+              "required": ["conservative"],
+              "properties": {"conservative": {"$ref": "#/$defs/weekProjectionRows4"}}
+            },
+            "horizon_conservative_weighted_coverage": {"$ref": "#/$defs/decimalString"},
+            "horizon_expected_weighted_coverage": {"$ref": "#/$defs/decimalString"},
+            "refrigerated_peak_lb_by_week": {"$ref": "#/$defs/decimal4"},
+            "incremental_offer_expiry_spoilage_lb": {"$ref": "#/$defs/decimalString"}
+          }
+        },
+        "full_accept_reference": {
+          "type": "object", "additionalProperties": false,
+          "required": ["PRODUCE", "refrigerated_peak_lb_by_week", "maximum_refrigerated_peak_lb", "overflow_lb", "incremental_offer_expiry_spoilage_lb"],
+          "properties": {
+            "PRODUCE": {"$ref": "#/$defs/endingWosSeries"},
+            "refrigerated_peak_lb_by_week": {"$ref": "#/$defs/decimal4"},
+            "maximum_refrigerated_peak_lb": {"$ref": "#/$defs/decimalString"},
+            "overflow_lb": {"$ref": "#/$defs/decimalString"},
+            "incremental_offer_expiry_spoilage_lb": {"$ref": "#/$defs/decimalString"}
+          }
+        },
+        "recommended_action_after": {
+          "type": "object", "additionalProperties": false,
+          "required": [
+            "action_id", "PRODUCE", "refrigerated_peak_lb_by_week", "maximum_refrigerated_peak_lb",
+            "incremental_offer_expiry_spoilage_lb", "horizon_conservative_weighted_coverage",
+            "horizon_expected_weighted_coverage", "remaining_budget_usd", "remaining_open_risk_ids"
+          ],
+          "properties": {
+            "action_id": {"type": "string", "pattern": "^ACT-B-[A-Z0-9_-]+$"},
+            "PRODUCE": {"$ref": "#/$defs/endingWosSeries"},
+            "refrigerated_peak_lb_by_week": {"$ref": "#/$defs/decimal4"},
+            "maximum_refrigerated_peak_lb": {"$ref": "#/$defs/decimalString"},
+            "incremental_offer_expiry_spoilage_lb": {"$ref": "#/$defs/decimalString"},
+            "horizon_conservative_weighted_coverage": {"$ref": "#/$defs/decimalString"},
+            "horizon_expected_weighted_coverage": {"$ref": "#/$defs/decimalString"},
+            "remaining_budget_usd": {"$ref": "#/$defs/decimalString"},
+            "remaining_open_risk_ids": {"$ref": "#/$defs/stringArray"}
+          }
+        }
+      }
+    },
+    "projectionsC": {
+      "type": "object", "additionalProperties": false,
+      "required": ["baseline", "full_accept_reference", "recommended_action_after"],
+      "properties": {
+        "baseline": {
+          "type": "object", "additionalProperties": false,
+          "required": ["PROTEIN", "DAIRY", "SNACKS_DISCRETIONARY", "weighted_coverage_by_week", "horizon_conservative_weighted_coverage", "horizon_expected_weighted_coverage", "maximum_dry_peak_lb"],
+          "properties": {
+            "PROTEIN": {"$ref": "#/$defs/endingWosSeries"},
+            "DAIRY": {"$ref": "#/$defs/endingWosSeries"},
+            "SNACKS_DISCRETIONARY": {"$ref": "#/$defs/endingWosSeries"},
+            "weighted_coverage_by_week": {"$ref": "#/$defs/decimal4"},
+            "horizon_conservative_weighted_coverage": {"$ref": "#/$defs/decimalString"},
+            "horizon_expected_weighted_coverage": {"$ref": "#/$defs/decimalString"},
+            "maximum_dry_peak_lb": {"$ref": "#/$defs/decimalString"}
+          }
+        },
+        "full_accept_reference": {
+          "type": "object", "additionalProperties": false,
+          "required": ["SNACKS_DISCRETIONARY", "horizon_expected_weighted_coverage", "maximum_dry_peak_lb", "incremental_expiry_spoilage_lb"],
+          "properties": {
+            "SNACKS_DISCRETIONARY": {
+              "type": "object", "additionalProperties": false,
+              "required": ["ending_inventory_lb", "action_quantity_distributed_by_week", "useful_disposition_fraction"],
+              "properties": {
+                "ending_inventory_lb": {"$ref": "#/$defs/integer4"},
+                "action_quantity_distributed_by_week": {"$ref": "#/$defs/integer4"},
+                "useful_disposition_fraction": {"$ref": "#/$defs/decimalString"}
+              }
+            },
+            "horizon_expected_weighted_coverage": {"$ref": "#/$defs/decimalString"},
+            "maximum_dry_peak_lb": {"$ref": "#/$defs/decimalString"},
+            "incremental_expiry_spoilage_lb": {"$ref": "#/$defs/decimalString"}
+          }
+        },
+        "recommended_action_after": {
+          "type": "object", "additionalProperties": false,
+          "required": ["action_id", "local_inventory_change_lb", "expected_useful_redirect_lb", "horizon_expected_weighted_coverage", "maximum_dry_peak_lb", "remaining_budget_usd", "remaining_open_risk_ids"],
+          "properties": {
+            "action_id": {"type": "string", "pattern": "^ACT-C-[A-Z0-9_-]+$"},
+            "local_inventory_change_lb": {"$ref": "#/$defs/decimalString"},
+            "expected_useful_redirect_lb": {"$ref": "#/$defs/decimalString"},
+            "horizon_expected_weighted_coverage": {"$ref": "#/$defs/decimalString"},
+            "maximum_dry_peak_lb": {"$ref": "#/$defs/decimalString"},
+            "remaining_budget_usd": {"$ref": "#/$defs/decimalString"},
+            "remaining_open_risk_ids": {"$ref": "#/$defs/stringArray"}
+          }
+        }
+      }
+    },
+    "projectionsD": {
+      "type": "object", "additionalProperties": false,
+      "required": ["baseline", "recommended_action_after"],
+      "properties": {
+        "baseline": {
+          "type": "object", "additionalProperties": false,
+          "required": [
+            "PROTEIN", "DAIRY", "conservative_weighted_coverage_by_week", "expected_weighted_coverage_by_week",
+            "horizon_conservative_weighted_coverage", "horizon_expected_weighted_coverage",
+            "conservative_shortage_burden", "expected_shortage_burden", "planning_budget_usd", "refrigerated_capacity_lb"
+          ],
+          "properties": {
+            "PROTEIN": {"$ref": "#/$defs/dualInventorySeries"},
+            "DAIRY": {"$ref": "#/$defs/dualInventorySeries"},
+            "conservative_weighted_coverage_by_week": {"$ref": "#/$defs/decimal4"},
+            "expected_weighted_coverage_by_week": {"$ref": "#/$defs/decimal4"},
+            "horizon_conservative_weighted_coverage": {"$ref": "#/$defs/decimalString"},
+            "horizon_expected_weighted_coverage": {"$ref": "#/$defs/decimalString"},
+            "conservative_shortage_burden": {"$ref": "#/$defs/decimalString"},
+            "expected_shortage_burden": {"$ref": "#/$defs/decimalString"},
+            "planning_budget_usd": {"$ref": "#/$defs/decimalString"},
+            "refrigerated_capacity_lb": {"$ref": "#/$defs/decimalString"}
+          }
+        },
+        "recommended_action_after": {
+          "type": "object", "additionalProperties": false,
+          "required": [
+            "action_id", "PROTEIN", "DAIRY", "horizon_conservative_weighted_coverage",
+            "horizon_expected_weighted_coverage", "conservative_shortage_burden", "expected_shortage_burden",
+            "maximum_refrigerated_peak_lb", "remaining_budget_usd", "remaining_open_risk_ids"
+          ],
+          "properties": {
+            "action_id": {"type": "string", "pattern": "^ACT-D-[A-Z0-9_-]+$"},
+            "PROTEIN": {"$ref": "#/$defs/dualInventorySeries"},
+            "DAIRY": {"$ref": "#/$defs/dualInventorySeries"},
+            "horizon_conservative_weighted_coverage": {"$ref": "#/$defs/decimalString"},
+            "horizon_expected_weighted_coverage": {"$ref": "#/$defs/decimalString"},
+            "conservative_shortage_burden": {"$ref": "#/$defs/decimalString"},
+            "expected_shortage_burden": {"$ref": "#/$defs/decimalString"},
+            "maximum_refrigerated_peak_lb": {"$ref": "#/$defs/decimalString"},
+            "remaining_budget_usd": {"$ref": "#/$defs/decimalString"},
+            "remaining_open_risk_ids": {"$ref": "#/$defs/stringArray"}
+          }
+        }
+      }
+    },
+    "projectionsE": {
+      "type": "object", "additionalProperties": false,
+      "required": ["status", "reason_code", "affected_record_ids"],
+      "properties": {
+        "status": {"const": "NOT_RUN"},
+        "reason_code": {"const": "BLOCKING_DATA_QUALITY"},
+        "affected_record_ids": {"$ref": "#/$defs/stringArray"}
+      }
+    },
+    "comparisonRow": {
+      "type": "object",
+      "required": [
+        "action_id", "first_minimum_breach_week_start",
+        "essential_categories_above_minimum_by_week", "stockout_weeks", "cost_usd",
+        "projected_expiry_spoilage_lb", "constraint_evaluation_status",
+        "hard_constraint_violation_codes", "unresolved_risk_ids"
+      ],
+      "properties": {
+        "action_id": {"oneOf": [{"type": "string", "pattern": "^ACT-[A-Z0-9_-]+$"}, {"type": "null"}]},
+        "requested_quantity_lb": {"type": "integer", "minimum": 0},
+        "first_minimum_breach_week_start": {"type": ["string", "null"], "format": "date"},
+        "essential_categories_above_minimum_by_week": {
+          "type": "array", "minItems": 4, "maxItems": 4,
+          "items": {"type": "integer", "minimum": 0, "maximum": 5}
+        },
+        "stockout_weeks": {"type": "integer", "minimum": 0, "maximum": 4},
+        "cost_usd": {"$ref": "#/$defs/decimalString"},
+        "projected_expiry_spoilage_lb": {"type": "integer", "minimum": 0},
+        "constraint_evaluation_status": {"enum": ["NOT_APPLICABLE", "PASSED", "FAILED"]},
+        "hard_constraint_violation_codes": {"$ref": "#/$defs/stringArray"},
+        "unresolved_risk_ids": {"$ref": "#/$defs/stringArray"},
+        "protein_conservative_ending_inventory_lb": {"$ref": "#/$defs/integer4"},
+        "protein_expected_ending_inventory_lb": {"$ref": "#/$defs/integer4"},
+        "w2_gap_to_target_lb": {"type": "integer", "minimum": 0},
+        "remaining_budget_usd": {"$ref": "#/$defs/decimalString"},
+        "horizon_conservative_weighted_coverage": {"$ref": "#/$defs/decimalString"},
+        "horizon_expected_weighted_coverage": {"$ref": "#/$defs/decimalString"},
+        "maximum_frozen_peak_lb": {"type": "integer", "minimum": 0},
+        "produce_ending_inventory_lb": {"$ref": "#/$defs/integer4"},
+        "incremental_offer_expiry_spoilage_lb": {"type": "integer", "minimum": 0},
+        "maximum_refrigerated_peak_lb": {"type": "integer", "minimum": 0},
+        "local_snack_ending_inventory_lb": {"$ref": "#/$defs/integer4"},
+        "local_pounds_added_lb": {"type": "integer", "minimum": 0},
+        "expected_useful_redirect_lb": {"type": "integer", "minimum": 0},
+        "maximum_dry_peak_lb": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "comparisonA": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["NO_INTERVENTION", "SIMPLE_REORDER", "AGENT_ACTION"],
+      "properties": {
+        "NO_INTERVENTION": {
+          "allOf": [
+            {"$ref": "#/$defs/comparisonRow"},
+            {"required": ["protein_conservative_ending_inventory_lb", "protein_expected_ending_inventory_lb", "w2_gap_to_target_lb", "remaining_budget_usd", "horizon_conservative_weighted_coverage", "horizon_expected_weighted_coverage", "maximum_frozen_peak_lb"]}
+          ]
+        },
+        "SIMPLE_REORDER": {
+          "allOf": [
+            {"$ref": "#/$defs/comparisonRow"},
+            {"required": ["requested_quantity_lb", "protein_conservative_ending_inventory_lb", "protein_expected_ending_inventory_lb", "w2_gap_to_target_lb", "remaining_budget_usd", "horizon_conservative_weighted_coverage", "horizon_expected_weighted_coverage", "maximum_frozen_peak_lb"]}
+          ]
+        },
+        "AGENT_ACTION": {
+          "allOf": [
+            {"$ref": "#/$defs/comparisonRow"},
+            {"required": ["requested_quantity_lb", "protein_conservative_ending_inventory_lb", "protein_expected_ending_inventory_lb", "w2_gap_to_target_lb", "remaining_budget_usd", "horizon_conservative_weighted_coverage", "horizon_expected_weighted_coverage", "maximum_frozen_peak_lb"]}
+          ]
+        }
+      }
+    },
+    "comparisonB": {
+      "type": "object", "additionalProperties": false,
+      "required": ["NO_INTERVENTION", "SIMPLE_REORDER", "AGENT_ACTION"],
+      "properties": {
+        "NO_INTERVENTION": {
+          "allOf": [
+            {"$ref": "#/$defs/comparisonRow"},
+            {"required": ["produce_ending_inventory_lb", "incremental_offer_expiry_spoilage_lb", "maximum_refrigerated_peak_lb", "horizon_expected_weighted_coverage"]}
+          ]
+        },
+        "SIMPLE_REORDER": {
+          "allOf": [
+            {"$ref": "#/$defs/comparisonRow"},
+            {"required": ["produce_ending_inventory_lb", "incremental_offer_expiry_spoilage_lb", "maximum_refrigerated_peak_lb", "horizon_expected_weighted_coverage"]}
+          ]
+        },
+        "AGENT_ACTION": {
+          "allOf": [
+            {"$ref": "#/$defs/comparisonRow"},
+            {"required": ["requested_quantity_lb", "produce_ending_inventory_lb", "incremental_offer_expiry_spoilage_lb", "maximum_refrigerated_peak_lb", "horizon_expected_weighted_coverage"]}
+          ]
+        }
+      }
+    },
+    "comparisonC": {
+      "type": "object", "additionalProperties": false,
+      "required": ["NO_INTERVENTION", "SIMPLE_REORDER", "AGENT_ACTION"],
+      "properties": {
+        "NO_INTERVENTION": {
+          "allOf": [
+            {"$ref": "#/$defs/comparisonRow"},
+            {"required": ["local_snack_ending_inventory_lb", "local_pounds_added_lb", "horizon_expected_weighted_coverage", "maximum_dry_peak_lb"]}
+          ]
+        },
+        "SIMPLE_REORDER": {
+          "allOf": [
+            {"$ref": "#/$defs/comparisonRow"},
+            {"required": ["local_snack_ending_inventory_lb", "local_pounds_added_lb", "horizon_expected_weighted_coverage", "maximum_dry_peak_lb"]}
+          ]
+        },
+        "AGENT_ACTION": {
+          "allOf": [
+            {"$ref": "#/$defs/comparisonRow"},
+            {"required": ["local_snack_ending_inventory_lb", "local_pounds_added_lb", "expected_useful_redirect_lb", "horizon_expected_weighted_coverage", "maximum_dry_peak_lb"]}
+          ]
+        }
+      }
+    },
+    "comparisonD": {
+      "type": "object", "additionalProperties": false,
+      "required": ["NO_INTERVENTION", "SIMPLE_REORDER", "AGENT_ACTION"],
+      "properties": {
+        "NO_INTERVENTION": {
+          "allOf": [
+            {"$ref": "#/$defs/comparisonRow"},
+            {"required": ["remaining_budget_usd", "horizon_conservative_weighted_coverage", "horizon_expected_weighted_coverage"]}
+          ]
+        },
+        "SIMPLE_REORDER": {
+          "allOf": [
+            {"$ref": "#/$defs/comparisonRow"},
+            {"required": ["requested_quantity_lb", "remaining_budget_usd", "horizon_conservative_weighted_coverage", "horizon_expected_weighted_coverage"]}
+          ]
+        },
+        "AGENT_ACTION": {
+          "allOf": [
+            {"$ref": "#/$defs/comparisonRow"},
+            {"required": ["requested_quantity_lb", "remaining_budget_usd", "horizon_conservative_weighted_coverage", "horizon_expected_weighted_coverage"]}
+          ]
+        }
+      }
+    },
+    "blockingIssue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["finding_id", "severity", "field", "record_ids", "observed_values", "message", "why_decision_critical"],
+      "properties": {
+        "finding_id": {"type": "string", "pattern": "^DQ-[A-Z0-9_-]+$"},
+        "severity": {"enum": ["ERROR", "WARNING"]},
+        "field": {"type": "string", "minLength": 1},
+        "record_ids": {"$ref": "#/$defs/stringArray"},
+        "observed_values": {"type": "array", "minItems": 1},
+        "unit": {"type": "string"},
+        "message": {"type": "string", "minLength": 1},
+        "why_decision_critical": {"type": "string", "minLength": 1}
+      }
+    },
+    "auditEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sequence", "event_type", "semantic_id"],
+      "properties": {
+        "sequence": {"type": "integer", "minimum": 1},
+        "event_type": {
+          "enum": [
+            "RUN_CREATED", "SCENARIO_VALIDATED", "NOTICE_EXTRACTED", "DISRUPTION_APPLIED",
+            "RISK_DETECTED", "RECOMMENDATION_PREPARED", "RECOMMENDATION_ABSTAINED",
+            "NO_ACTION_REQUIRED", "ANALYSIS_FAILED", "MANAGER_APPROVED",
+            "MANAGER_EDITED_APPROVED", "MANAGER_REJECTED", "MANAGER_DEFERRED",
+            "SIMULATED_ACTION_APPLIED", "RUN_RESET", "FALLBACK_USED"
+          ]
+        },
+        "semantic_id": {"type": "string", "minLength": 1}
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "data_version", "scenario_id", "scenario_version",
+    "golden_version", "fixed_clock_utc", "decision_status", "forecast_distribution_lb",
+    "risks", "projections", "action_evaluations", "ranking",
+    "recommended_action", "comparison", "blocking_issues", "audit_oracle", "provenance"
+  ],
+  "properties": {
+    "schema_version": {"$ref": "common.schema.json#/$defs/schemaVersion"},
+    "data_version": {"$ref": "common.schema.json#/$defs/dataVersion"},
+    "scenario_id": {"type": "string", "pattern": "^SCN-[A-E]-[A-Z0-9_-]+$"},
+    "scenario_version": {"type": "string", "pattern": "^scenario-[a-e]/1\\.0\\.0$"},
+    "golden_version": {"const": "golden/1.0.0"},
+    "fixed_clock_utc": {"const": "2026-08-03T13:00:00.000Z"},
+    "decision_status": {"enum": ["READY_FOR_REVIEW", "ABSTAINED"]},
+    "forecast_distribution_lb": {
+      "type": "object",
+      "required": ["PROTEIN", "PRODUCE", "DAIRY", "GRAINS", "STAPLES_MIXED_MEALS", "SNACKS_DISCRETIONARY"],
+      "additionalProperties": false,
+      "properties": {
+        "PROTEIN": {"const": 9000},
+        "PRODUCE": {"const": 14000},
+        "DAIRY": {"const": 6000},
+        "GRAINS": {"const": 10000},
+        "STAPLES_MIXED_MEALS": {"const": 9000},
+        "SNACKS_DISCRETIONARY": {"const": 4000}
+      }
+    },
+    "risks": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/risk"}},
+    "projections": {
+      "oneOf": [
+        {"$ref": "#/$defs/projectionsA"},
+        {"$ref": "#/$defs/projectionsB"},
+        {"$ref": "#/$defs/projectionsC"},
+        {"$ref": "#/$defs/projectionsD"},
+        {"$ref": "#/$defs/projectionsE"}
+      ]
+    },
+    "action_evaluations": {"type": "array", "items": {"$ref": "#/$defs/actionEvaluation"}},
+    "ranking": {"$ref": "#/$defs/stringArray"},
+    "recommended_action": {"oneOf": [{"$ref": "#/$defs/recommendation"}, {"type": "null"}]},
+    "comparison": {
+      "anyOf": [
+        {"$ref": "#/$defs/comparisonA"},
+        {"$ref": "#/$defs/comparisonB"},
+        {"$ref": "#/$defs/comparisonC"},
+        {"$ref": "#/$defs/comparisonD"},
+        {"type": "null"}
+      ]
+    },
+    "blocking_issues": {"type": "array", "items": {"$ref": "#/$defs/blockingIssue"}},
+    "audit_oracle": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/auditEvent"}},
+    "provenance": {"$ref": "common.schema.json#/$defs/provenance"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"decision_status": {"const": "READY_FOR_REVIEW"}}, "required": ["decision_status"]},
+      "then": {
+        "properties": {
+          "action_evaluations": {"minItems": 1},
+          "ranking": {"minItems": 1},
+          "recommended_action": {"$ref": "#/$defs/recommendation"},
+          "comparison": {
+            "anyOf": [
+              {"$ref": "#/$defs/comparisonA"},
+              {"$ref": "#/$defs/comparisonB"},
+              {"$ref": "#/$defs/comparisonC"},
+              {"$ref": "#/$defs/comparisonD"}
+            ]
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "action_evaluations": {"maxItems": 0},
+          "ranking": {"maxItems": 0},
+          "recommended_action": {"type": "null"},
+          "comparison": {"type": "null"},
+          "blocking_issues": {"minItems": 1}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"scenario_id": {"const": "SCN-A-USDA-PROTEIN-DELAY"}}, "required": ["scenario_id"]},
+      "then": {"properties": {"projections": {"$ref": "#/$defs/projectionsA"}, "comparison": {"$ref": "#/$defs/comparisonA"}}}
+    },
+    {
+      "if": {"properties": {"scenario_id": {"const": "SCN-B-SHORT-LIFE-PRODUCE"}}, "required": ["scenario_id"]},
+      "then": {"properties": {"projections": {"$ref": "#/$defs/projectionsB"}, "comparison": {"$ref": "#/$defs/comparisonB"}}}
+    },
+    {
+      "if": {"properties": {"scenario_id": {"const": "SCN-C-SNACK-MISMATCH"}}, "required": ["scenario_id"]},
+      "then": {"properties": {"projections": {"$ref": "#/$defs/projectionsC"}, "comparison": {"$ref": "#/$defs/comparisonC"}}}
+    },
+    {
+      "if": {"properties": {"scenario_id": {"const": "SCN-D-BUDGET-TRADEOFF"}}, "required": ["scenario_id"]},
+      "then": {"properties": {"projections": {"$ref": "#/$defs/projectionsD"}, "comparison": {"$ref": "#/$defs/comparisonD"}}}
+    },
+    {
+      "if": {"properties": {"scenario_id": {"const": "SCN-E-DATA-CONFLICT"}}, "required": ["scenario_id"]},
+      "then": {"properties": {"projections": {"$ref": "#/$defs/projectionsE"}, "comparison": {"type": "null"}}}
+    }
+  ]
+}

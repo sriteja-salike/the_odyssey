@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nourishops.local/schemas/category_policies.schema.json",
+  "title": "Category policy fixture",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "data_version", "fixture_id", "provenance", "records"],
+  "properties": {
+    "schema_version": {"$ref": "common.schema.json#/$defs/schemaVersion"},
+    "data_version": {"$ref": "common.schema.json#/$defs/dataVersion"},
+    "fixture_id": {"const": "FIXTURE-CATEGORY-POLICIES"},
+    "provenance": {"$ref": "common.schema.json#/$defs/provenance"},
+    "records": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "policy_id", "category_id", "display_name", "priority_weight",
+          "essential_assortment", "minimum_weeks_of_supply",
+          "target_weeks_of_supply", "primary_storage_type",
+          "default_usable_yield_ratio",
+          "record_version", "provenance_id"
+        ],
+        "properties": {
+          "policy_id": {"type": "string", "pattern": "^POLICY-[A-Z_]+$"},
+          "category_id": {"$ref": "common.schema.json#/$defs/categoryId"},
+          "display_name": {"type": "string", "minLength": 1},
+          "priority_weight": {"type": "integer", "minimum": 1, "maximum": 5},
+          "essential_assortment": {"type": "boolean"},
+          "minimum_weeks_of_supply": {"type": "number", "exclusiveMinimum": 0},
+          "target_weeks_of_supply": {"type": "number", "exclusiveMinimum": 0},
+          "primary_storage_type": {"enum": ["DRY", "REFRIGERATED", "FROZEN"]},
+          "default_usable_yield_ratio": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+          "record_version": {"$ref": "common.schema.json#/$defs/recordVersion"},
+          "provenance_id": {"const": "PROV-SYNTHETIC-POLICY"}
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nourishops.local/schemas/planned_inbound.schema.json",
+  "title": "Planned inbound fixture",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "data_version", "fixture_id", "provenance", "records"],
+  "properties": {
+    "schema_version": {"$ref": "common.schema.json#/$defs/schemaVersion"},
+    "data_version": {"$ref": "common.schema.json#/$defs/dataVersion"},
+    "fixture_id": {"const": "FIXTURE-PLANNED-INBOUND"},
+    "provenance": {"$ref": "common.schema.json#/$defs/provenance"},
+    "records": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/plannedInboundRecord"}
+    }
+  },
+  "$defs": {
+    "plannedInboundRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "inbound_id", "warehouse_id", "expected_week_start", "category_id",
+        "gross_quantity_lb", "source_type", "status", "arrival_probability",
+        "storage_type", "expected_usable_yield_ratio", "usable_life_days",
+        "evidence_ids", "record_version", "provenance_id"
+      ],
+      "properties": {
+        "inbound_id": {"type": "string", "pattern": "^INB-[A-Z0-9_-]+$"},
+        "warehouse_id": {"const": "WH-CENTRAL-01"},
+        "expected_week_start": {"type": ["string", "null"], "format": "date"},
+        "category_id": {"$ref": "common.schema.json#/$defs/categoryId"},
+        "gross_quantity_lb": {"$ref": "common.schema.json#/$defs/nullableNonnegativePounds"},
+        "source_type": {"$ref": "common.schema.json#/$defs/sourceType"},
+        "status": {"$ref": "common.schema.json#/$defs/inboundStatus"},
+        "arrival_probability": {"$ref": "common.schema.json#/$defs/probability"},
+        "storage_type": {"enum": ["DRY", "REFRIGERATED", "FROZEN"]},
+        "expected_usable_yield_ratio": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+        "usable_life_days": {"type": ["integer", "null"], "minimum": 0},
+        "evidence_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^EVD-[A-Z0-9_-]+$"}
+        },
+        "record_version": {"$ref": "common.schema.json#/$defs/recordVersion"},
+        "provenance_id": {"const": "PROV-SYNTHETIC-INBOUND"}
+      }
+    }
+  }
+}

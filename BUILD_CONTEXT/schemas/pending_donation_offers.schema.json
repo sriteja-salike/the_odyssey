@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nourishops.local/schemas/pending_donation_offers.schema.json",
+  "title": "Synthetic pending donation offer fixture",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "data_version", "fixture_id", "provenance", "records"],
+  "properties": {
+    "schema_version": {"$ref": "common.schema.json#/$defs/schemaVersion"},
+    "data_version": {"$ref": "common.schema.json#/$defs/dataVersion"},
+    "fixture_id": {"const": "FIXTURE-PENDING-DONATION-OFFERS"},
+    "provenance": {"$ref": "common.schema.json#/$defs/provenance"},
+    "records": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "offer_id", "scenario_id", "category_id", "gross_quantity_lb",
+          "arrival_week_start", "expected_usable_yield_ratio", "usable_life_days",
+          "storage_type", "food_safety_status", "response_deadline",
+          "evidence_ids", "record_version", "provenance_id"
+        ],
+        "properties": {
+          "offer_id": {"type": "string", "pattern": "^OFFER-[B-C]-[A-Z0-9_-]+$"},
+          "scenario_id": {"enum": ["SCN-B-SHORT-LIFE-PRODUCE", "SCN-C-SNACK-MISMATCH"]},
+          "category_id": {"$ref": "common.schema.json#/$defs/categoryId"},
+          "gross_quantity_lb": {"type": "integer", "exclusiveMinimum": 0},
+          "arrival_week_start": {"const": "2026-08-03"},
+          "expected_usable_yield_ratio": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+          "usable_life_days": {"type": "integer", "exclusiveMinimum": 0},
+          "storage_type": {"enum": ["DRY", "REFRIGERATED", "FROZEN"]},
+          "food_safety_status": {"const": "KNOWN_ALLOWED_FOR_SIMULATION"},
+          "response_deadline": {"type": "string", "format": "date-time"},
+          "evidence_ids": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"type": "string", "pattern": "^EVD-[A-Z0-9_-]+$"}
+          },
+          "record_version": {"$ref": "common.schema.json#/$defs/recordVersion"},
+          "provenance_id": {"const": "PROV-SYNTHETIC-OFFER"}
+        }
+      }
+    }
+  }
+}

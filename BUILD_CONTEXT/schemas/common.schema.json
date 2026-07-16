@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nourishops.local/schemas/common.schema.json",
+  "title": "NourishOps shared data types",
+  "$defs": {
+    "schemaVersion": {
+      "const": "data-contract/1.0.0"
+    },
+    "dataVersion": {
+      "const": "synthetic-base/1.0.0"
+    },
+    "recordVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "categoryId": {
+      "enum": [
+        "PROTEIN",
+        "PRODUCE",
+        "DAIRY",
+        "GRAINS",
+        "STAPLES_MIXED_MEALS",
+        "SNACKS_DISCRETIONARY"
+      ]
+    },
+    "storageType": {
+      "enum": ["DRY", "REFRIGERATED", "FROZEN", "NONE"]
+    },
+    "sourceType": {
+      "enum": ["DONATION", "USDA", "PURCHASE", "TRANSFER"]
+    },
+    "inboundStatus": {
+      "type": ["string", "null"],
+      "enum": ["CONFIRMED", "PROBABLE", "UNCONFIRMED", null]
+    },
+    "actionType": {
+      "enum": [
+        "PURCHASE",
+        "TARGETED_DONOR_REQUEST",
+        "REQUEST_TRANSFER",
+        "ACCEPT_DONATION",
+        "PARTIAL_ACCEPT",
+        "REDIRECT_DONATION",
+        "DECLINE_DONATION",
+        "ACCELERATE_DISTRIBUTION",
+        "MONITOR"
+      ]
+    },
+    "riskType": {
+      "enum": [
+        "SHORTAGE",
+        "SHORT_LIFE_CAPACITY",
+        "DONATION_MISMATCH",
+        "BUDGET_TRADEOFF",
+        "DATA_QUALITY"
+      ]
+    },
+    "operationalBurden": {
+      "enum": ["LOW", "MEDIUM", "HIGH"]
+    },
+    "confidence": {
+      "enum": ["HIGH", "MEDIUM", "LOW", "NOT_APPLICABLE"]
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "created_by", "description"],
+      "properties": {
+        "mode": {"const": "SYNTHETIC"},
+        "created_by": {"const": "NourishOps build-context team"},
+        "description": {"type": "string", "minLength": 1},
+        "derived_from_ids": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        }
+      }
+    },
+    "weekStart": {
+      "type": "string",
+      "format": "date",
+      "pattern": "^2026-[0-9]{2}-[0-9]{2}$"
+    },
+    "nonnegativePounds": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "nullableNonnegativePounds": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "probability": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "money": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "multipleOf": 0.01
+    }
+  }
+}

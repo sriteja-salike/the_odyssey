@@ -1,0 +1,90 @@
+{
+  "schema_version": "data-contract/1.0.0",
+  "data_version": "synthetic-base/1.0.0",
+  "fixture_id": "FIXTURE-CATEGORY-POLICIES",
+  "provenance": {
+    "mode": "SYNTHETIC",
+    "created_by": "NourishOps build-context team",
+    "description": "Staff-defined demonstration assortment policy; not clinical nutrition guidance or Food Finders policy."
+  },
+  "records": [
+    {
+      "policy_id": "POLICY-PROTEIN",
+      "category_id": "PROTEIN",
+      "display_name": "Protein",
+      "priority_weight": 5,
+      "essential_assortment": true,
+      "minimum_weeks_of_supply": 1.5,
+      "target_weeks_of_supply": 3.0,
+      "primary_storage_type": "FROZEN",
+      "default_usable_yield_ratio": 1.0,
+      "record_version": 1,
+      "provenance_id": "PROV-SYNTHETIC-POLICY"
+    },
+    {
+      "policy_id": "POLICY-PRODUCE",
+      "category_id": "PRODUCE",
+      "display_name": "Produce",
+      "priority_weight": 5,
+      "essential_assortment": true,
+      "minimum_weeks_of_supply": 0.5,
+      "target_weeks_of_supply": 1.0,
+      "primary_storage_type": "REFRIGERATED",
+      "default_usable_yield_ratio": 1.0,
+      "record_version": 1,
+      "provenance_id": "PROV-SYNTHETIC-POLICY"
+    },
+    {
+      "policy_id": "POLICY-DAIRY",
+      "category_id": "DAIRY",
+      "display_name": "Dairy",
+      "priority_weight": 4,
+      "essential_assortment": true,
+      "minimum_weeks_of_supply": 0.75,
+      "target_weeks_of_supply": 1.5,
+      "primary_storage_type": "REFRIGERATED",
+      "default_usable_yield_ratio": 1.0,
+      "record_version": 1,
+      "provenance_id": "PROV-SYNTHETIC-POLICY"
+    },
+    {
+      "policy_id": "POLICY-GRAINS",
+      "category_id": "GRAINS",
+      "display_name": "Grains",
+      "priority_weight": 3,
+      "essential_assortment": true,
+      "minimum_weeks_of_supply": 2.0,
+      "target_weeks_of_supply": 4.0,
+      "primary_storage_type": "DRY",
+      "default_usable_yield_ratio": 1.0,
+      "record_version": 1,
+      "provenance_id": "PROV-SYNTHETIC-POLICY"
+    },
+    {
+      "policy_id": "POLICY-STAPLES_MIXED_MEALS",
+      "category_id": "STAPLES_MIXED_MEALS",
+      "display_name": "Staples & mixed meals",
+      "priority_weight": 4,
+      "essential_assortment": true,
+      "minimum_weeks_of_supply": 2.0,
+      "target_weeks_of_supply": 4.0,
+      "primary_storage_type": "DRY",
+      "default_usable_yield_ratio": 1.0,
+      "record_version": 1,
+      "provenance_id": "PROV-SYNTHETIC-POLICY"
+    },
+    {
+      "policy_id": "POLICY-SNACKS_DISCRETIONARY",
+      "category_id": "SNACKS_DISCRETIONARY",
+      "display_name": "Snacks & discretionary",
+      "priority_weight": 1,
+      "essential_assortment": false,
+      "minimum_weeks_of_supply": 0.5,
+      "target_weeks_of_supply": 1.5,
+      "primary_storage_type": "DRY",
+      "default_usable_yield_ratio": 1.0,
+      "record_version": 1,
+      "provenance_id": "PROV-SYNTHETIC-POLICY"
+    }
+  ]
+}
