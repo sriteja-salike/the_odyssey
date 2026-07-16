@@ -1,0 +1,40 @@
+{
+  "schema_version": "data-contract/1.0.0",
+  "data_version": "synthetic-base/1.0.0",
+  "scenario_id": "SCN-C-SNACK-MISMATCH",
+  "scenario_version": "scenario-c/1.0.0",
+  "seed": 20260713,
+  "display_name": "Snack donation mismatch",
+  "planning_date": "2026-08-03",
+  "forecast_week_starts": ["2026-08-03", "2026-08-10", "2026-08-17", "2026-08-24"],
+  "primary_risk_type": "DONATION_MISMATCH",
+  "provenance": {
+    "mode": "SYNTHETIC",
+    "created_by": "NourishOps build-context team",
+    "description": "Offer-disposition scenario with essential categories below target and snacks well above target.",
+    "derived_from_ids": ["OFFER-C-SNACKS-12000", "EVD-C-SNACK-OFFER"]
+  },
+  "overlay": {
+    "remove_inbound_ids": [],
+    "inbound_mutations": [
+      {
+        "inbound_id": "INB-USDA-DAIRY-301",
+        "set": {"gross_quantity_lb": 3000}
+      }
+    ],
+    "warehouse_overrides": {}
+  },
+  "active_offer_ids": ["OFFER-C-SNACKS-12000"],
+  "enabled_action_ids": [
+    "ACT-C-REDIRECT-SNACKS-12000",
+    "ACT-C-DECLINE-SNACKS-12000",
+    "ACT-C-ACCEPT-SNACKS-12000",
+    "ACT-C-MONITOR"
+  ],
+  "active_evidence_ids": [
+    "EVD-BASE-INBOUND-LEDGER",
+    "EVD-C-SNACK-OFFER",
+    "EVD-C-PEER-REDIRECT"
+  ],
+  "cached_notice_extraction": null
+}

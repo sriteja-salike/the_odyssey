@@ -1,8 +1,8 @@
 # 02 — Visual System and Screen Reference
 
 **Authority:** Normative after a visual direction is selected  
-**Current status:** `PENDING_HUMAN_SELECTION`  
-**Build gate:** Frontend implementation must not begin while status is pending  
+**Current status:** `SELECTED_AND_NORMATIVE`  
+**Build gate:** Cleared — Direction C ("Clinical Calm") selected 2026-07-16 (superseding an initial Direction B pick); frontend implementation may proceed  
 **Target frame:** 1440 × 1024 desktop web application  
 
 ---
@@ -12,13 +12,73 @@
 | Field | Value |
 |---|---|
 | Ideation set date | 2026-07-13 |
-| Selected displayed option | Pending |
-| Selected direction name | Pending |
-| Selection feedback | Pending |
-| Final reference asset paths | Pending |
-| Approved by | User |
+| Selected displayed option | Direction C |
+| Selected direction name | Clinical Calm — light, airy, humane operator workspace |
+| Selection feedback | Initially selected Direction B (Control Desk), then changed to C: the dark console read as too technical/engineer-facing. C's light, calm, single-accent treatment is more approachable and usable for a food-bank operator with ~2 minutes. |
+| Final reference asset paths | `BUILD_CONTEXT/visual-references/` (review/approved/abstained/audit to be captured from the built app) |
+| Approved by | User (2026-07-16) |
 
-Exactly three independent visual directions will be generated from the same product and UX contract. The user must select one displayed option or request a revised combination. After selection, this document must be updated with the exact direction, tokens, and saved reference assets before frontend coding begins.
+Three independent visual directions (A · Field Brief, B · Control Desk, C · Clinical Calm) were generated from this contract and rendered as the hero Review screen with frozen Scenario A data. The user first picked B, then switched to **Direction C**. The concrete design tokens are frozen in §11 below and are the normative target for frontend implementation.
+
+## 11. Selected design tokens — Direction C ("Clinical Calm")
+
+Light-native, airy, humane workspace. One confident indigo accent; a single UI sans family, with monospace reserved only for machine record IDs. Plain-language first, generous whitespace, restrained status color. All values are the frozen implementation contract; the built app must use these exact tokens.
+
+### 11.1 Color tokens
+
+| Token | Value | Role |
+|---|---|---|
+| `--bg` | `#FBFBFC` | Page / app ground (near-white, cool bias) |
+| `--appbar` | `#FFFFFF` | Top bar and context strip |
+| `--panel` | `#FFFFFF` | Default grouped surface |
+| `--raised` | `#F1F3F6` | Recommendation panel / hover / quiet fills |
+| `--line` | `#E4E7EC` | Default divider/border |
+| `--line-strong` | `#CFD4DB` | Emphasized border, secondary button outline |
+| `--ink` | `#22262B` | Primary text |
+| `--sub` | `#5A626C` | Secondary text, axis/label, expected series |
+| `--action` | `#3D4CB0` | Primary interactive (buttons, links, focus) — indigo, distinct from risk red and success green |
+| `--action-ink` | `#FFFFFF` | Text/icon on `--action` fills |
+| `--breach` | `#C0413A` | Hard breach, blocked constraint, minimum threshold line (strongest danger) |
+| `--warn` | `#B07D1E` | Probable supply, low confidence (quieter warning) |
+| `--ok` | `#2F8F6B` | Completed simulated transition (success — never claimed mission impact) |
+| `--series-conservative` | `#3D4CB0` | Chart: conservative projection (primary solid) |
+| `--series-after` | `#2F8F6B` | Chart: with-approved-action projection (named comparison) |
+| `--series-expected` | `#5A626C` | Chart: expected projection (secondary, dashed) |
+
+Light tints for chips/pills: breach `#F7E5E3`, ok `#E6F2EC`, warn `#F6EEDD`, action `#E7E9F6`. Status/danger colors always ship with text + icon/shape, never color alone. Chart series validated colorblind-safe against the light surface (dataviz `validate_palette.js`): conservative↔after normal-vision ΔE 24.8, all CVD checks pass; the minimum line is a reserved status color carried with a direct "Minimum 1.5" label and a distinct flat-rule shape.
+
+### 11.2 Typography
+
+- **Families:** UI sans = `ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif`. Monospace (record IDs / rule codes only) = `ui-monospace, "SF Mono", "JetBrains Mono", "Roboto Mono", Menlo, Consolas, monospace`.
+- **Numbers use the sans family with `font-variant-numeric: tabular-nums`** for column alignment — not monospace. Mono is reserved for machine identifiers (e.g. `INB-USDA-PROTEIN-104`) and rule codes.
+- Scale: body 14–15px; section headings and labels sentence-case 12–13px (not uppercase eyebrows); risk/decision headings ~24px (concise); primary metric values ~20px.
+- Plain language leads; explanation lines ≤ ~65 characters; primary-view prose ≤ 120 words.
+
+### 11.3 Spacing, shape, elevation, icons
+
+- **Spacing:** 4px base grid — steps 8/12/16/24/32/48; generous — main padding 32/24, card padding 24, column gap 32.
+- **Radii:** 6px (chips, inputs, code tags), 10px (buttons), 14px (panels/cards). `999px` reserved for true status pills, the mode indicator, and compact filters only. No nested cards.
+- **Control height:** ≥ 40px; critical/primary targets 44px.
+- **Elevation:** flat by default — panels use `--panel`/`--raised` + `--line`, not shadow. Shadow only for dialogs, menus, and genuinely floating panels: `0 24px 60px -30px rgba(20,24,40,.35)`.
+- **Icons:** Lucide only, 16px default (13–14px inline with text), ~2px stroke. Icons accompany text for consequential status; never replace it. No emoji, sparkles, robot/brain glyphs.
+
+### 11.4 Component states (required in the component reference)
+
+- **Focus:** `2px solid var(--action)`, `outline-offset:2px`, visible on every surface.
+- **Hover:** shift fill to `--raised` or border to `--line-strong`.
+- **Selected:** `--action`-tinted border + subtle tinted fill; the original agent recommendation stays visually identified after an alternative is selected.
+- **Pressed:** momentary darken.
+- **Disabled:** reduced opacity + a discoverable reason (tooltip/inline text) — never a silent dead control.
+- **Error:** `--breach` border + message programmatically tied to the field.
+- **Success:** `--ok` text + check icon; status text changes on live/offline fallback, not the whole composition.
+
+### 11.5 Chart tokens (Recharts)
+
+- Conservative = `--series-conservative`, solid, 3px, weightiest; markers ≥ 8px at data points.
+- Expected = `--series-expected`, dashed `5 5`, 2.5px.
+- With-approved-action = `--series-after`, solid 2.5px, added only after an action is selected, named in the legend.
+- Minimum threshold = `--breach`, 2px solid, labeled "Minimum 1.5". Target = `--sub`, 1.5px dashed `2 4`, labeled "Target 3.0".
+- Grid/axis recessive (`--line` / `--sub`). Single y-axis only. Every chart ships a text summary + `View chart data` semantic table; the SVG is `aria-hidden` only when that table is present.
 
 ## 2. Shared visual brief
 

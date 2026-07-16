@@ -1,0 +1,123 @@
+{
+  "schema_version": "data-contract/1.0.0",
+  "data_version": "synthetic-base/1.0.0",
+  "scenario_id": "SCN-A-USDA-PROTEIN-DELAY",
+  "scenario_version": "scenario-a/1.0.0",
+  "golden_version": "golden/1.0.0",
+  "fixed_clock_utc": "2026-08-03T13:00:00.000Z",
+  "decision_status": "READY_FOR_REVIEW",
+  "forecast_distribution_lb": {
+    "PROTEIN": 9000,
+    "PRODUCE": 14000,
+    "DAIRY": 6000,
+    "GRAINS": 10000,
+    "STAPLES_MIXED_MEALS": 9000,
+    "SNACKS_DISCRETIONARY": 4000
+  },
+  "risks": [
+    {
+      "risk_id": "RISK-A-PROTEIN-W2",
+      "risk_type": "SHORTAGE",
+      "category_id": "PROTEIN",
+      "is_primary": true,
+      "first_breach_week_start": "2026-08-10",
+      "first_breach_week_index": 2,
+      "minimum_weeks_of_supply": "1.5",
+      "target_weeks_of_supply": "3.0",
+      "conservative_end_inventory_lb_at_breach": "12000",
+      "conservative_end_wos_at_breach": "1.333333333333333333333333333",
+      "target_end_inventory_lb": "27000",
+      "gap_to_target_lb": "15000",
+      "shortage_depth": "0.1111111111111111111111111113",
+      "priority_score": "61.00000000000000000000000000",
+      "evidence_ids": ["FLOW-20260727-PROTEIN", "INB-USDA-PROTEIN-104", "POLICY-PROTEIN", "EVD-A-USDA-DELAY-NOTICE"]
+    }
+  ],
+  "projections": {
+    "baseline": {
+      "PROTEIN": {
+        "conservative": [
+          {"week_start":"2026-08-03","beginning_inventory_lb":"30000","confirmed_inbound_lb":"0","probable_inbound_lb":"0","fulfilled_distribution_lb":"9000","unmet_distribution_lb":"0","expiry_spoilage_lb":"0","ending_inventory_lb":"21000","end_wos":"2.333333333333333333333333333"},
+          {"week_start":"2026-08-10","beginning_inventory_lb":"21000","confirmed_inbound_lb":"0","probable_inbound_lb":"0","fulfilled_distribution_lb":"9000","unmet_distribution_lb":"0","expiry_spoilage_lb":"0","ending_inventory_lb":"12000","end_wos":"1.333333333333333333333333333"},
+          {"week_start":"2026-08-17","beginning_inventory_lb":"12000","confirmed_inbound_lb":"9000","probable_inbound_lb":"0","fulfilled_distribution_lb":"9000","unmet_distribution_lb":"0","expiry_spoilage_lb":"0","ending_inventory_lb":"12000","end_wos":"1.333333333333333333333333333"},
+          {"week_start":"2026-08-24","beginning_inventory_lb":"12000","confirmed_inbound_lb":"9000","probable_inbound_lb":"0","fulfilled_distribution_lb":"9000","unmet_distribution_lb":"0","expiry_spoilage_lb":"0","ending_inventory_lb":"12000","end_wos":"1.333333333333333333333333333"}
+        ],
+        "expected": [
+          {"week_start":"2026-08-03","ending_inventory_lb":"21000","end_wos":"2.333333333333333333333333333"},
+          {"week_start":"2026-08-10","ending_inventory_lb":"12000","end_wos":"1.333333333333333333333333333"},
+          {"week_start":"2026-08-17","confirmed_inbound_lb":"9000","probability_adjusted_inbound_lb":"6500","ending_inventory_lb":"18500","end_wos":"2.055555555555555555555555556"},
+          {"week_start":"2026-08-24","ending_inventory_lb":"18500","end_wos":"2.055555555555555555555555556"}
+        ]
+      },
+      "all_category_conservative_ending_inventory_lb": {
+        "PROTEIN": [21000,12000,12000,12000],
+        "PRODUCE": [11000,11000,11000,11000],
+        "DAIRY": [9000,9000,9000,9000],
+        "GRAINS": [45000,45000,45000,45000],
+        "STAPLES_MIXED_MEALS": [40000,40000,40000,40000],
+        "SNACKS_DISCRETIONARY": [26000,22000,18000,14000]
+      },
+      "conservative_weighted_coverage_by_week": ["0.9007936507936507936507936509","0.8250360750360750360750360750","0.8250360750360750360750360750","0.8250360750360750360750360750"],
+      "expected_weighted_coverage_by_week": ["0.9007936507936507936507936509","0.8250360750360750360750360750","0.8797498797498797498797498795","0.8797498797498797498797498795"],
+      "horizon_conservative_weighted_coverage": "0.8439754689754689754689754690",
+      "horizon_expected_weighted_coverage": "0.8713323713323713323713323715",
+      "capacity_stress_frozen_peak_lb_by_week": ["30000","21000","31000","31000"],
+      "maximum_capacity_stress_frozen_peak_lb": "31000"
+    },
+    "recommended_action_after": {
+      "action_id": "ACT-A-PURCHASE-PROTEIN-15000",
+      "PROTEIN": {
+        "conservative_ending_inventory_lb": ["21000","27000","27000","27000"],
+        "conservative_end_wos": ["2.333333333333333333333333333","3.0","3.0","3.0"],
+        "expected_ending_inventory_lb": ["21000","27000","33500","33500"],
+        "expected_end_wos": ["2.333333333333333333333333333","3.0","3.722222222222222222222222222","3.722222222222222222222222222"]
+      },
+      "horizon_conservative_weighted_coverage": "0.9386724386724386724386724387",
+      "horizon_expected_weighted_coverage": "0.9386724386724386724386724385",
+      "capacity_stress_frozen_peak_lb_by_week": ["30000","36000","46000","46000"],
+      "maximum_capacity_stress_frozen_peak_lb": "46000",
+      "remaining_budget_usd": "7250.00",
+      "remaining_open_risk_ids": []
+    }
+  },
+  "action_evaluations": [
+    {
+      "evaluated_action_id":"EVAL-ACT-A-PURCHASE-PROTEIN-15000-15000","action_id":"ACT-A-PURCHASE-PROTEIN-15000","requested_quantity_lb":15000,"cost_usd":"12750.00","feasible":true,"failed_constraint_codes":[],"score_components":{"R":"0.7137190250336064118497476349","M":"0.5233644859813084112149532691","T":"0.5","P":"1.0","E":"0.655","S":"0.5"},"score_unrounded":"66.63464584613845675753770895","score_display":"66.6","rank":1,"gap_reduction_lb":"15000","evidence_ids":["EVD-A-VENDOR-STANDARD"]
+    },
+    {
+      "evaluated_action_id":"EVAL-ACT-A-TRANSFER-PROTEIN-8000-8000","action_id":"ACT-A-TRANSFER-PROTEIN-8000","requested_quantity_lb":8000,"cost_usd":"600.00","feasible":true,"failed_constraint_codes":[],"score_components":{"R":"0.4135169638403462939948089719","M":"0.3925233644859813084112149522","T":"0.5","P":"1.0","E":"0.94","S":"0.5"},"score_unrounded":"53.35873066253520939799070278","score_display":"53.4","rank":2,"gap_reduction_lb":"8000","evidence_ids":["EVD-A-PEER-TRANSFER"]
+    },
+    {
+      "evaluated_action_id":"EVAL-ACT-A-DONOR-REQUEST-PROTEIN-15000-15000","action_id":"ACT-A-DONOR-REQUEST-PROTEIN-15000","requested_quantity_lb":15000,"cost_usd":"0.00","feasible":true,"failed_constraint_codes":[],"score_components":{"R":"0.1188487584650112866817155756","M":"0.3311915887850467289719626144","T":"0.5","P":"0.45","E":"0.91","S":"0.0"},"score_unrounded":"30.57202590662644248011645319","score_display":"30.6","rank":3,"expected_usable_quantity_lb":"6750","evidence_ids":["EVD-A-DONOR-ASSUMPTION"]
+    },
+    {"evaluated_action_id":"EVAL-ACT-A-MONITOR-0","action_id":"ACT-A-MONITOR","requested_quantity_lb":0,"cost_usd":"0.00","feasible":false,"failed_constraint_codes":["MONITOR_NOT_SAFE"],"score_components":null,"score_unrounded":null,"score_display":null,"rank":null},
+    {"evaluated_action_id":"EVAL-ACT-A-PURCHASE-PROTEIN-25000-25000","action_id":"ACT-A-PURCHASE-PROTEIN-25000","requested_quantity_lb":25000,"cost_usd":"21250.00","feasible":false,"failed_constraint_codes":["BUDGET","STORAGE_CAPACITY"],"failed_constraints":[{"code":"BUDGET","observed":"21250.00","limit":"20000.00","unit":"USD"},{"code":"STORAGE_CAPACITY","observed":"56000","limit":"50000","unit":"lb frozen peak"}],"score_components":null,"score_unrounded":null,"score_display":null,"rank":null},
+    {"evaluated_action_id":"EVAL-ACT-A-PURCHASE-PROTEIN-LATE-15000-15000","action_id":"ACT-A-PURCHASE-PROTEIN-LATE-15000","requested_quantity_lb":15000,"cost_usd":"12000.00","feasible":false,"failed_constraint_codes":["ARRIVES_BY_BREACH"],"failed_constraints":[{"code":"ARRIVES_BY_BREACH","observed":"2026-08-17","limit":"2026-08-10","unit":"week_start"}],"score_components":null,"score_unrounded":null,"score_display":null,"rank":null}
+  ],
+  "ranking": ["ACT-A-PURCHASE-PROTEIN-15000","ACT-A-TRANSFER-PROTEIN-8000","ACT-A-DONOR-REQUEST-PROTEIN-15000"],
+  "recommended_action": {
+    "recommendation_id":"REC-A-001","risk_id":"RISK-A-PROTEIN-W2","action_id":"ACT-A-PURCHASE-PROTEIN-15000","evaluated_action_id":"EVAL-ACT-A-PURCHASE-PROTEIN-15000-15000","requested_quantity_lb":15000,"arrival_week_start":"2026-08-10","unit_price_usd_per_lb":"0.85","cost_usd":"12750.00","expected_usable_quantity_lb":"15000","gap_reduction_lb":"15000","requires_human_approval":true,"confidence_value":"0.9054191731704193859773154021","confidence":"HIGH","confidence_inputs":{"action_reliability":"1.0","data_quality":"1.0","forecast_stability":"0.9607162899340806930888419799","evidence_completeness":"1.0","rank_margin":"0.1327591518360324735954700617"},"source_ids":["FLOW-20260706-PROTEIN","FLOW-20260713-PROTEIN","FLOW-20260720-PROTEIN","FLOW-20260727-PROTEIN","INB-USDA-PROTEIN-104","POLICY-PROTEIN","EVD-A-USDA-DELAY-NOTICE","EVD-A-VENDOR-STANDARD"]
+  },
+  "comparison": {
+    "NO_INTERVENTION":{"action_id":null,"first_minimum_breach_week_start":"2026-08-10","essential_categories_above_minimum_by_week":[5,4,4,4],"protein_conservative_ending_inventory_lb":[21000,12000,12000,12000],"protein_expected_ending_inventory_lb":[21000,12000,18500,18500],"w2_gap_to_target_lb":15000,"cost_usd":"0.00","remaining_budget_usd":"20000.00","horizon_conservative_weighted_coverage":"0.8439754689754689754689754690","horizon_expected_weighted_coverage":"0.8713323713323713323713323715","maximum_frozen_peak_lb":31000,"stockout_weeks":0,"projected_expiry_spoilage_lb":0,"constraint_evaluation_status":"NOT_APPLICABLE","hard_constraint_violation_codes":[],"unresolved_risk_ids":["RISK-A-PROTEIN-W2"]},
+    "SIMPLE_REORDER":{"action_id":"ACT-A-PURCHASE-PROTEIN-15000","requested_quantity_lb":5000,"first_minimum_breach_week_start":null,"essential_categories_above_minimum_by_week":[5,5,5,5],"protein_conservative_ending_inventory_lb":[21000,17000,17000,17000],"protein_expected_ending_inventory_lb":[21000,17000,23500,23500],"w2_gap_to_target_lb":10000,"cost_usd":"4250.00","remaining_budget_usd":"15750.00","horizon_conservative_weighted_coverage":"0.8755411255411255411255411255","horizon_expected_weighted_coverage":"0.9028980278980278980278980279","maximum_frozen_peak_lb":36000,"stockout_weeks":0,"projected_expiry_spoilage_lb":0,"constraint_evaluation_status":"PASSED","hard_constraint_violation_codes":[],"unresolved_risk_ids":[]},
+    "AGENT_ACTION":{"action_id":"ACT-A-PURCHASE-PROTEIN-15000","requested_quantity_lb":15000,"first_minimum_breach_week_start":null,"essential_categories_above_minimum_by_week":[5,5,5,5],"protein_conservative_ending_inventory_lb":[21000,27000,27000,27000],"protein_expected_ending_inventory_lb":[21000,27000,33500,33500],"w2_gap_to_target_lb":0,"cost_usd":"12750.00","remaining_budget_usd":"7250.00","horizon_conservative_weighted_coverage":"0.9386724386724386724386724387","horizon_expected_weighted_coverage":"0.9386724386724386724386724385","maximum_frozen_peak_lb":46000,"stockout_weeks":0,"projected_expiry_spoilage_lb":0,"constraint_evaluation_status":"PASSED","hard_constraint_violation_codes":[],"unresolved_risk_ids":[]}
+  },
+  "blocking_issues": [],
+  "audit_oracle": [
+    {"sequence":1,"event_type":"RUN_CREATED","semantic_id":"SCN-A-USDA-PROTEIN-DELAY"},
+    {"sequence":2,"event_type":"SCENARIO_VALIDATED","semantic_id":"synthetic-base/1.0.0"},
+    {"sequence":3,"event_type":"NOTICE_EXTRACTED","semantic_id":"EVD-A-USDA-DELAY-NOTICE"},
+    {"sequence":4,"event_type":"DISRUPTION_APPLIED","semantic_id":"INB-USDA-PROTEIN-104"},
+    {"sequence":5,"event_type":"RISK_DETECTED","semantic_id":"RISK-A-PROTEIN-W2"},
+    {"sequence":6,"event_type":"RECOMMENDATION_PREPARED","semantic_id":"REC-A-001"},
+    {"sequence":7,"event_type":"MANAGER_APPROVED","semantic_id":"EVAL-ACT-A-PURCHASE-PROTEIN-15000-15000"},
+    {"sequence":8,"event_type":"SIMULATED_ACTION_APPLIED","semantic_id":"ACT-A-PURCHASE-PROTEIN-15000"}
+  ],
+  "provenance": {
+    "mode": "SYNTHETIC",
+    "created_by": "NourishOps build-context team",
+    "description": "Immutable deterministic oracle for the hero scenario.",
+    "derived_from_ids": ["FIXTURE-HISTORICAL-FLOW","FIXTURE-PLANNED-INBOUND","SCN-A-USDA-PROTEIN-DELAY"]
+  }
+}

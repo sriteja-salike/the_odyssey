@@ -1,0 +1,39 @@
+{
+  "schema_version": "data-contract/1.0.0",
+  "data_version": "synthetic-base/1.0.0",
+  "scenario_id": "SCN-E-DATA-CONFLICT",
+  "scenario_version": "scenario-e/1.0.0",
+  "seed": 20260713,
+  "display_name": "Missing and conflicting inbound data",
+  "planning_date": "2026-08-03",
+  "forecast_week_starts": ["2026-08-03", "2026-08-10", "2026-08-17", "2026-08-24"],
+  "primary_risk_type": "DATA_QUALITY",
+  "provenance": {
+    "mode": "SYNTHETIC",
+    "created_by": "NourishOps build-context team",
+    "description": "Abstention scenario with a missing arrival status, conflicting quantity/date evidence, and instruction-like untrusted text.",
+    "derived_from_ids": ["INB-USDA-PROTEIN-104", "EVD-E-USDA-NOTICE", "EVD-E-RECEIVING-NOTE"]
+  },
+  "overlay": {
+    "remove_inbound_ids": [],
+    "inbound_mutations": [
+      {
+        "inbound_id": "INB-USDA-PROTEIN-104",
+        "set": {
+          "expected_week_start": null,
+          "status": null,
+          "arrival_probability": null
+        }
+      }
+    ],
+    "warehouse_overrides": {}
+  },
+  "active_offer_ids": [],
+  "enabled_action_ids": [],
+  "active_evidence_ids": [
+    "EVD-BASE-INBOUND-LEDGER",
+    "EVD-E-USDA-NOTICE",
+    "EVD-E-RECEIVING-NOTE"
+  ],
+  "cached_notice_extraction": null
+}

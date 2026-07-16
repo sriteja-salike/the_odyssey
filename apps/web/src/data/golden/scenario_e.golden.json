@@ -1,0 +1,19 @@
+{
+  "schema_version":"data-contract/1.0.0","data_version":"synthetic-base/1.0.0","scenario_id":"SCN-E-DATA-CONFLICT","scenario_version":"scenario-e/1.0.0","golden_version":"golden/1.0.0","fixed_clock_utc":"2026-08-03T13:00:00.000Z","decision_status":"ABSTAINED",
+  "forecast_distribution_lb":{"PROTEIN":9000,"PRODUCE":14000,"DAIRY":6000,"GRAINS":10000,"STAPLES_MIXED_MEALS":9000,"SNACKS_DISCRETIONARY":4000},
+  "risks":[{"risk_id":"RISK-E-DATA-QUALITY","risk_type":"DATA_QUALITY","category_id":null,"is_primary":true,"priority_score":"100","finding_ids":["DQ-E-ARRIVAL-WEEK-CONFLICT","DQ-E-ARRIVAL-WEEK-MISSING","DQ-E-INBOUND-STATUS-MISSING","DQ-E-QUANTITY-CONFLICT"],"evidence_ids":["INB-USDA-PROTEIN-104","EVD-E-USDA-NOTICE","EVD-E-RECEIVING-NOTE"]}],
+  "projections":{"status":"NOT_RUN","reason_code":"BLOCKING_DATA_QUALITY","affected_record_ids":["INB-USDA-PROTEIN-104"]},
+  "action_evaluations":[],
+  "ranking":[],
+  "recommended_action":null,
+  "comparison":null,
+  "blocking_issues":[
+    {"finding_id":"DQ-E-ARRIVAL-WEEK-CONFLICT","severity":"ERROR","field":"expected_week_start","record_ids":["EVD-E-USDA-NOTICE","EVD-E-RECEIVING-NOTE"],"observed_values":["2026-08-17","2026-08-10"],"message":"Two active evidence records give different arrival weeks for INB-USDA-PROTEIN-104.","why_decision_critical":"Arrival timing determines whether food is available before a projected breach."},
+    {"finding_id":"DQ-E-ARRIVAL-WEEK-MISSING","severity":"ERROR","field":"expected_week_start","record_ids":["INB-USDA-PROTEIN-104"],"observed_values":[null],"message":"The normalized inbound record has no expected arrival week.","why_decision_critical":"The projection cannot assign the inbound to W1–W4."},
+    {"finding_id":"DQ-E-INBOUND-STATUS-MISSING","severity":"ERROR","field":"status","record_ids":["INB-USDA-PROTEIN-104"],"observed_values":[null],"message":"The normalized inbound record has no CONFIRMED, PROBABLE, or UNCONFIRMED status.","why_decision_critical":"Conservative and expected projections require an authoritative inclusion rule."},
+    {"finding_id":"DQ-E-QUANTITY-CONFLICT","severity":"ERROR","field":"gross_quantity_lb","record_ids":["EVD-E-USDA-NOTICE","EVD-E-RECEIVING-NOTE"],"observed_values":[10000,6000],"unit":"lb","message":"Two active evidence records give different quantities for INB-USDA-PROTEIN-104.","why_decision_critical":"The gap and action quantity would change depending on which value is used."},
+    {"finding_id":"DQ-E-UNTRUSTED-INSTRUCTION-IGNORED","severity":"WARNING","field":"body","record_ids":["EVD-E-RECEIVING-NOTE"],"observed_values":["instruction-like text present"],"message":"Instruction-like content in untrusted scenario text was ignored.","why_decision_critical":"Synthetic notice text is evidence data and has no authority to approve or alter an action."}
+  ],
+  "audit_oracle":[{"sequence":1,"event_type":"RUN_CREATED","semantic_id":"SCN-E-DATA-CONFLICT"},{"sequence":2,"event_type":"SCENARIO_VALIDATED","semantic_id":"DQ-E-INBOUND-STATUS-MISSING"},{"sequence":3,"event_type":"RISK_DETECTED","semantic_id":"RISK-E-DATA-QUALITY"},{"sequence":4,"event_type":"RECOMMENDATION_ABSTAINED","semantic_id":"RISK-E-DATA-QUALITY"}],
+  "provenance":{"mode":"SYNTHETIC","created_by":"NourishOps build-context team","description":"Immutable abstention oracle. No projection, score, rank, approval, or simulated action is permitted.","derived_from_ids":["SCN-E-DATA-CONFLICT","EVD-E-USDA-NOTICE","EVD-E-RECEIVING-NOTE"]}
+}

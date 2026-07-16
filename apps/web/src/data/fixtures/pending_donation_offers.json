@@ -1,0 +1,42 @@
+{
+  "schema_version": "data-contract/1.0.0",
+  "data_version": "synthetic-base/1.0.0",
+  "fixture_id": "FIXTURE-PENDING-DONATION-OFFERS",
+  "provenance": {
+    "mode": "SYNTHETIC",
+    "created_by": "NourishOps build-context team",
+    "description": "Two fictional pending offers used only by Scenarios B and C. Food safety is fixture-declared, never inferred by AI."
+  },
+  "records": [
+    {
+      "offer_id": "OFFER-B-PRODUCE-20000",
+      "scenario_id": "SCN-B-SHORT-LIFE-PRODUCE",
+      "category_id": "PRODUCE",
+      "gross_quantity_lb": 20000,
+      "arrival_week_start": "2026-08-03",
+      "expected_usable_yield_ratio": 1.0,
+      "usable_life_days": 5,
+      "storage_type": "REFRIGERATED",
+      "food_safety_status": "KNOWN_ALLOWED_FOR_SIMULATION",
+      "response_deadline": "2026-08-03T20:00:00Z",
+      "evidence_ids": ["EVD-B-PRODUCE-OFFER"],
+      "record_version": 1,
+      "provenance_id": "PROV-SYNTHETIC-OFFER"
+    },
+    {
+      "offer_id": "OFFER-C-SNACKS-12000",
+      "scenario_id": "SCN-C-SNACK-MISMATCH",
+      "category_id": "SNACKS_DISCRETIONARY",
+      "gross_quantity_lb": 12000,
+      "arrival_week_start": "2026-08-03",
+      "expected_usable_yield_ratio": 1.0,
+      "usable_life_days": 90,
+      "storage_type": "DRY",
+      "food_safety_status": "KNOWN_ALLOWED_FOR_SIMULATION",
+      "response_deadline": "2026-08-03T22:00:00Z",
+      "evidence_ids": ["EVD-C-SNACK-OFFER"],
+      "record_version": 1,
+      "provenance_id": "PROV-SYNTHETIC-OFFER"
+    }
+  ]
+}
