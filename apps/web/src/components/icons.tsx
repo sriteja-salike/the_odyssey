@@ -7,6 +7,8 @@ export {
   ShieldCheck,
   ArrowRight,
   ChevronRight,
+  MessageSquare,
+  SendHorizontal,
 } from "lucide-react";
 
 export const ICON_SM = 14;

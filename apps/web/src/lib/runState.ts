@@ -61,6 +61,10 @@ export function setRunState(runId: string, state: RunState) {
   write(runId, state);
 }
 
+export function readRunState(runId: string): RunState {
+  return read(runId);
+}
+
 export function resetRun(runId: string) {
   write(runId, { phase: "DRAFT" });
 }

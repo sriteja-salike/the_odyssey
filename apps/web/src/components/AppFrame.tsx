@@ -1,11 +1,13 @@
 /* Persistent application frame (01 §6.1, 02 §4): wordmark, nav, scenario/run
    context, mode indicator, clean-run control, and the persistent simulation
    notice — present on every route. */
+import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { AlertTriangle, ICON_SM } from "./icons";
+import { AlertTriangle, MessageSquare, ICON_SM } from "./icons";
 import { SCENARIOS, getOverlay, type ScenarioLetter } from "../lib/api";
 import { createRun } from "../lib/liveApi";
 import { date } from "../lib/format";
+import Assistant from "./Assistant";
 
 // Exact persistent notice — verbatim from 00_BUILD_CONTRACT.md.
 const SIM_NOTICE =
@@ -22,6 +24,7 @@ interface Props {
 export default function AppFrame({ runId, letter, active, onStartClean, children }: Props) {
   const navigate = useNavigate();
   const overlay = getOverlay(letter);
+  const [assistantOpen, setAssistantOpen] = useState(false);
 
   async function defaultStartClean() {
     const run = await createRun(letter, runId);
@@ -61,6 +64,13 @@ export default function AppFrame({ runId, letter, active, onStartClean, children
           <button className="btn btn--secondary btn--sm" onClick={onStartClean ?? defaultStartClean}>
             Start clean run
           </button>
+          <button
+            className="btn btn--secondary btn--sm"
+            onClick={() => setAssistantOpen((v) => !v)}
+            aria-pressed={assistantOpen}
+          >
+            <MessageSquare size={ICON_SM} aria-hidden /> Assistant
+          </button>
         </div>
       </header>
 
@@ -99,6 +109,8 @@ export default function AppFrame({ runId, letter, active, onStartClean, children
       </div>
 
       <main className="main">{children}</main>
+
+      {assistantOpen && <Assistant letter={letter} runId={runId} onClose={() => setAssistantOpen(false)} />}
     </div>
   );
 }
