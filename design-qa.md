@@ -1,51 +1,74 @@
-# Product Design QA — Adaptive Home and Decision Flow
+# NourishOps agent-first demo — Design QA
 
-Date: 2026-07-17
-Branch: `codex/carbon-ui-redesign`
+## Comparison target
 
-## Visual truth
+- Source visual truth: `BUILD_CONTEXT/design-references/adaptive-home-option-3.png` for Home structure, `BUILD_CONTEXT/design-references/option-3-checklist-coach.png` for the decision journey, and `BUILD_CONTEXT/design-references/option-2-plain-language-visual.png` for the compact operational visual.
+- Browser-rendered implementation: `BUILD_CONTEXT/design-audit-agent-demo/04-home-after.jpg`, `05-live-recommendation-after.jpg`, `06-result-after.jpg`, `07-safe-stop-after.jpg`, and `13-mobile-assistant-postfix.jpg`.
+- Viewports: 1440×1024 CSS pixels for desktop and 390×844 CSS pixels for mobile.
+- States: verified Home queue, multi-turn operations assistant, Scenario A live-agent recommendation, simulated approved result, Scenario E safe stop, and agent audit trace.
 
-- Selected adaptive Home reference: `BUILD_CONTEXT/design-references/adaptive-home-option-3.png`
-- Final desktop implementation: `BUILD_CONTEXT/design-references/adaptive-home-implementation.png`
-- Side-by-side comparison input: `BUILD_CONTEXT/design-references/adaptive-home-comparison.png`
-- Mobile implementation: `BUILD_CONTEXT/design-qa/adaptive-home-390x844.png`
-- Assistant implementation: `BUILD_CONTEXT/design-qa/adaptive-assistant-1440x1024.png`
-- Decision-flow references retained: `BUILD_CONTEXT/design-references/option-3-checklist-coach.png` and `BUILD_CONTEXT/design-references/option-2-plain-language-visual.png`
+## Full-view comparison evidence
 
-The selected Home reference and final implementation were normalized into one 2880×1024 comparison input and inspected together. The implementation follows the reference's editorial greeting, large issue composer, persistent simulation statement, one Agent Briefing item, and restrained service palette. It intentionally omits the reference attachment control because this release has no attachment workflow; no nonfunctional control was imitated. The briefing contains more verified context than the sketch while preserving one primary action.
+- `BUILD_CONTEXT/design-audit-agent-demo/08-home-comparison.jpg` places the adaptive Home source and implementation in one normalized comparison image.
+- `BUILD_CONTEXT/design-audit-agent-demo/09-decision-comparison.jpg` places the checklist source and live Scenario A review in one normalized comparison image.
+- The implementation preserves the source hierarchy, warm service palette, editorial display type, restrained borders, one dominant action, and linear decision journey. The missing right-side summary panel is intentional: the selected product contract removed permanent sidebars from the primary decision flow.
 
-## User-flow verification
+## Focused comparison evidence
 
-| Flow / state | Result |
-|---|---|
-| Home at 1440×1024 | One composer, three lightweight prompt examples, one briefing item, and one primary response action. No scenario picker or card-grid dashboard. |
-| Home at 390×844 | No horizontal overflow; simulation notice remains visible; bottom navigation has Home, Ask, and Records; briefing remains linear. |
-| Effective 200% zoom | No horizontal overflow at the reduced viewport. |
-| Composer → assistant | Example question opens `/assistant`, sends the initial question, and returns a verified answer with one matched case. |
-| Assistant → decision | `Review response` creates and evaluates the matching case, then opens the existing structured review route. |
-| Review → approval → result | Confirmation repeats action, quantity, cost, timing, and simulation consequence; approval produces `Action completed in simulation` and records outcome feedback. |
-| Safe abstention | The conflicting-records work item opens Step 1 with field-specific discrepancies, blocks Step 2, makes Step 3 unavailable, and renders zero approval controls. |
-| Offline fallback | Frozen work items, presentations, and assistant routing remain available without inventing quantities or permitting unverified custom previews. |
+- `BUILD_CONTEXT/design-audit-agent-demo/10-visual-comparison.jpg` places the Option 2 coverage treatment next to the implemented compact Step 1 visual.
+- The implemented visual retains the decisive breach bar, labeled minimum, plain-language summary, and exact-value disclosure while using the selected Carbon/Recharts system. No decorative art, custom SVG, or substitute image asset is present.
 
-## Contract and accessibility verification
+## Findings
 
-- Home and chat consume semantic `WorkItem` and `DecisionPresentation` contracts; generic surfaces do not branch on Scenario A–E.
-- Frozen scenarios remain regression fixtures while five operational archetypes provide reusable skeletons.
-- The assistant uses assistant-ui thread/composer primitives but cannot approve or mutate a decision.
-- Quantitative visuals remain Recharts-based with plain-language summaries and expandable exact-value tables.
-- Testing Library and axe-core cover the core draft, review dialog, and abstention structures.
-- Final verification: 30 frontend tests, frontend typecheck, production build, Ruff, 87 backend tests plus 15 PostgreSQL integration tests.
-- Fresh browser checks found zero console errors or warnings in Home, the 200% equivalent, and final safe-abstention routing.
+No actionable P0, P1, or P2 findings remain.
 
-## Findings and fixes
+The final pass explicitly checked:
 
-1. P1 — the first implementation centered and vertically stretched the Home hierarchy relative to the selected reference. Fixed by moving the simulation statement into the header, left-aligning the desktop hero, enlarging the composer, and bringing the briefing into the first viewport.
-2. P1 — scenario fixtures originally risked becoming the navigation model. Fixed by replacing named scenario selection with a verified adaptive briefing and keeping demo fixtures under the overflow menu.
-3. P1 — Scenario E exposed generic `Record` labels because the presentation mapper read the wrong field key. Fixed by mapping `field_name` to Shipment status, Expected arrival, and Shipment quantity with plain-language missing/conflict messages.
-4. P2 — Scenario E conflict rows could share React keys. Fixed with stable field/source/index keys; the final browser pass has no duplicate-key warning.
-5. P2 — the mobile navigation grid still assumed the previous number of destinations. Fixed to allocate all visible destinations without clipping or horizontal scroll.
-6. P2 — a simulated approval handoff briefly showed historical hot-reload errors after a container rebuild. A clean reload and full repeated journey produced zero new console errors; no runtime defect remained.
+- Fonts and typography: Newsreader display hierarchy and IBM Plex interface text are consistent, legible, and wrap correctly at desktop and mobile widths.
+- Spacing and layout rhythm: Home, chat, checklist, result, and safe-stop surfaces preserve one-task focus, compact radii, stable borders, and 44px controls without horizontal overflow.
+- Colors and tokens: deep blue actions, ochre attention, forest completion, and restrained breach red map consistently to meaning without gradients or decorative animation.
+- Image and asset fidelity: the target contains no product imagery that needs replacement; Carbon icons and Recharts are used instead of custom SVG/CSS art.
+- Copy and content: fixture names are absent from primary navigation, Home does not show a recommendation before agent review, and agent/fallback/human-authority language remains explicit.
+- Interaction and accessibility: keyboard-oriented dialog behavior, labels, heading order, disclosures, semantic chart alternatives, safe-stop approval absence, assistant follow-up, refresh continuity, and narrow layout were exercised. Axe component coverage reports no violations with color contrast separately governed by the selected tokens.
 
-No P0, P1, or P2 findings remain open.
+## Comparison history
+
+### Initial audit
+
+- [P1] Home presented a deterministic preview under `Agent briefing`, making the decision source ambiguous. Fixed by renaming the surface `Today’s decision queue`, removing the premature recommendation, and making `Ask agent to review` the handoff. Post-fix evidence: `04-home-after.jpg` and `08-home-comparison.jpg`.
+- [P1] The assistant sent only the latest message and broad/irrelevant prompts could default to a case. Fixed with bounded full-history requests, current-work-item continuity, typed `ANSWER` / `CLARIFY` / `DECISION` / `SAFE_STOP` outcomes, no-match clarification, refresh persistence, and a verified fallback. Post-fix evidence: `03-follow-up-after.jpg` plus automated conversation tests.
+- [P1] The recommendation did not visibly distinguish agent judgment, deterministic safety checks, and human authority. Fixed with `Agent recommendation`, live/fallback mode, verified-record count, safety status, human-approval boundary, and agent rationale. Post-fix evidence: `05-live-recommendation-after.jpg` and `09-decision-comparison.jpg`.
+- [P2] Scenario E lacked a clear agent-to-policy safe-stop explanation and correction path. Fixed with `Agent-safe stop`, exact conflicting records, locked approval, `Ask agent how to resolve this`, and abstention-specific audit wording. Post-fix evidence: `07-safe-stop-after.jpg`.
+- [P2] The first mobile assistant composition placed the context panel before the chat, hiding the conversation and composer below the fold. Fixed by restoring the chat as the first mobile task and reducing the thread height so the composer remains reachable. Before: `12-mobile-assistant-after.jpg`. After: `13-mobile-assistant-postfix.jpg`.
+
+## Primary interactions tested
+
+- Home question and verified queue navigation.
+- Multi-turn assistant follow-up with matched case continuity and refresh persistence.
+- Live Anthropic Scenario A agent recommendation.
+- Approval dialog focus and simulated completion.
+- Result feedback entry point and return-to-Home path.
+- Scenario E abstention with no approval control.
+- Audit trace showing solver, agent, reviewer, validator, tools, and fallback mode without chain-of-thought.
+- 390×844 Home and assistant layouts.
+
+## Console and reliability check
+
+The in-app browser log contained no warning- or error-level application messages after the final build. The only non-debug lifecycle entry was expected Vite reconnect logging while containers were rebuilt. Backend health, PostgreSQL, and frontend remained ready after rebuild.
+
+## Implementation checklist
+
+- [x] Agent-first Home and chat entry.
+- [x] Typed, bounded multi-turn agent contract.
+- [x] Honest live/fallback provenance.
+- [x] Verified recommendation and safe-stop handoffs.
+- [x] Human approval and simulation boundary.
+- [x] Result, feedback, Records, and audit transparency.
+- [x] Desktop/mobile visual comparison and post-fix recapture.
+- [x] Unit, integration, type, build, and accessibility-oriented component verification.
+
+## Follow-up polish
+
+No blocking polish remains for the demo. A future field-test pass should validate Jordan’s wording and urgency ordering with food-bank staff rather than adding more interface density.
 
 final result: passed

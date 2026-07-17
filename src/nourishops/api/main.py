@@ -20,7 +20,11 @@ from nourishops.api.models import (
     OutcomeFeedbackRequest,
     OperationsAssistantRequest,
 )
-from nourishops.agents import build_decision_agent, build_decision_reviewer
+from nourishops.agents import (
+    build_decision_agent,
+    build_decision_reviewer,
+    build_operations_agent,
+)
 from nourishops.application.service import ApplicationError, NourishOpsService
 from nourishops.persistence.postgres import IdempotencyKeyReused, PostgresStore
 from nourishops.settings import get_settings
@@ -31,6 +35,7 @@ service = NourishOpsService(
     store,
     agent=build_decision_agent(settings),
     reviewer=build_decision_reviewer(settings),
+    operations_agent=build_operations_agent(settings),
 )
 IdempotencyKey = Annotated[
     str,
@@ -155,7 +160,9 @@ def work_items():
 
 @app.post("/api/v1/operations-assistant/messages")
 def operations_assistant(request: OperationsAssistantRequest):
-    return envelope(service.answer_operations_question(request.message))
+    return envelope(service.answer_operations_question(
+        request.conversation(), request.current_work_item_id,
+    ))
 
 
 @app.post("/api/v1/runs", status_code=201)

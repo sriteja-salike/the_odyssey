@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from nourishops.agents.contracts import DecisionAgent, DecisionReviewer
 from nourishops.agents.offline import OfflineDecisionAgent
+from nourishops.agents.operations import OfflineOperationsAgent, OperationsAgent
 from nourishops.agents.reviewer import OfflineDecisionReviewer
 from nourishops.application.decision_package import (
     build_decision_brief,
@@ -44,11 +45,13 @@ class ApplicationError(Exception):
 class NourishOpsService:
     def __init__(self, store: PostgresStore, solver_registry: SolverRegistry | None = None,
                  agent: DecisionAgent | None = None,
-                 reviewer: DecisionReviewer | None = None):
+                 reviewer: DecisionReviewer | None = None,
+                 operations_agent: OperationsAgent | None = None):
         self.store = store
         self.solver_registry = solver_registry or SolverRegistry()
         self.agent = agent or OfflineDecisionAgent()
         self.reviewer = reviewer or OfflineDecisionReviewer()
+        self.operations_agent = operations_agent or OfflineOperationsAgent()
         self.execution_adapter = SimulatedExecutionAdapter()
 
     def create_run(
@@ -107,71 +110,95 @@ class NourishOpsService:
             work_items.append(build_work_item(scenario_key, analysis, context))
         return [item.model_dump(mode="json") for item in work_items]
 
-    def answer_operations_question(self, message: str) -> dict[str, Any]:
-        """Answer common coordinator questions from verified work-item facts.
-
-        The assistant is a navigation and explanation layer. It never ranks a
-        new action, changes a quantity, or bypasses the existing approval flow.
-        """
+    def answer_operations_question(
+        self,
+        messages: list[dict[str, str]],
+        current_work_item_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Let the operations agent route intent, then render only verified facts."""
         items = self.list_work_items()
-        normalized = message.casefold()
-        selected = items[0]
-        keyword_map = {
-            "produce": "PERISHABLE_CAPACITY",
-            "cold": "PERISHABLE_CAPACITY",
-            "storage": "PERISHABLE_CAPACITY",
-            "donation": "DONATION_DISPOSITION",
-            "snack": "DONATION_DISPOSITION",
-            "budget": "RESOURCE_TRADEOFF",
-            "cost": "RESOURCE_TRADEOFF",
-            "conflict": "DATA_RECONCILIATION",
-            "record": "DATA_RECONCILIATION",
-            "delivery": "INBOUND_DISRUPTION",
-            "shipment": "INBOUND_DISRUPTION",
-            "protein": "INBOUND_DISRUPTION",
-        }
-        requested_archetype = next(
-            (archetype for keyword, archetype in keyword_map.items() if keyword in normalized),
+        outcome = self.operations_agent.route(messages, items, current_work_item_id)
+        selection = outcome.selection
+        selected = next(
+            (item for item in items if item["work_item_id"] == selection.work_item_id),
             None,
         )
-        if requested_archetype:
-            selected = next(
-                (item for item in items if item["presentation"]["archetype"] == requested_archetype),
-                selected,
-            )
+        answer = self._render_operations_answer(selection.answer_style, selected)
+        return {
+            "schema_version": "operations-assistant-response/2.0.0",
+            "response_type": selection.response_type,
+            "answer": answer,
+            "work_item": selected,
+            "suggested_questions": (
+                selected["presentation"]["suggested_questions"] if selected else [
+                    "What needs my attention first?",
+                    "Are any deliveries at risk?",
+                    "Do any records conflict?",
+                ]
+            ),
+            "authority_note": (
+                "The agent can match, explain, and recommend from verified options; "
+                "only a manager can approve a simulated action."
+            ),
+            "agent": outcome.metadata.model_dump(mode="json"),
+            "guardrails": {
+                "facts": "Backend-rendered from verified snapshots",
+                "constraints": "Rechecked by the deterministic safety engine",
+                "approval": "Human manager required",
+            },
+            "synthetic": True,
+        }
 
+    @staticmethod
+    def _render_operations_answer(
+        style: str, selected: dict[str, Any] | None,
+    ) -> str:
+        if selected is None:
+            return (
+                "I can help with shipment delays, short-life offers, donation "
+                "mismatches, budget tradeoffs, or conflicting records. What changed, "
+                "or what decision do you need to make?"
+            )
         presentation = selected["presentation"]
         issue = presentation["issue"]
         recommendation = presentation["recommendation"]
-        if "most urgent" in normalized or "urgent" in normalized:
-            answer = f"Start with {issue['title']} {issue['summary']}"
-        elif "information" in normalized or "checked" in normalized or "source" in normalized:
-            answer = (
-                f"I checked {selected['source_count']} active evidence records plus the frozen inventory, "
-                "inbound, policy, capacity, and action-catalog snapshots for this case. "
-                "Open the response to see every source and assumption."
+        if style == "PRIORITY":
+            return f"Start with {issue['title']} {issue['summary']}"
+        if style == "SOURCES":
+            return (
+                f"I matched this issue using {selected['source_count']} active evidence "
+                "records and the frozen operational snapshots. Open the review to see "
+                "each source and assumption."
             )
-        elif "why" in normalized and recommendation:
-            answer = f"{recommendation['effect']} {issue['summary']}"
-            if recommendation.get("caution"):
-                answer = f"{answer} {recommendation['caution']}"
-        elif recommendation:
-            answer = (
-                f"{issue['title']} The verified response is: {recommendation['title']}. "
+        if style in {"CONFLICTS", "CORRECTION"}:
+            conflicts = presentation["visual"].get("conflicts") or []
+            if not conflicts:
+                return f"{issue['title']} {issue['summary']}"
+            details = "; ".join(
+                f"{item['field_label']}: {' versus '.join(item['observed_values'])} "
+                f"in {', '.join(item['sources'])}"
+                for item in conflicts
+            )
+            if style == "CORRECTION":
+                return (
+                    f"Confirm these fields against the source of record before retrying: "
+                    f"{details}. No approval is available until they agree."
+                )
+            return f"These decision-critical records conflict: {details}."
+        if style == "RATIONALE" and recommendation:
+            caution = f" {recommendation['caution']}" if recommendation.get("caution") else ""
+            return f"{recommendation['effect']} {issue['summary']}{caution}"
+        if style == "RECOMMENDATION" and recommendation:
+            return (
+                f"The agent-matched response to review is {recommendation['title']}. "
                 f"{recommendation['effect']}"
             )
-        else:
-            answer = (
-                f"{issue['title']} {issue['summary']} The system stopped safely and did not create an approval."
-            )
-        return {
-            "schema_version": "operations-assistant-response/1.0.0",
-            "answer": answer,
-            "work_item": selected,
-            "suggested_questions": presentation["suggested_questions"],
-            "authority_note": "The assistant explains verified data and routes decisions; only a manager can approve a simulated action.",
-            "synthetic": True,
-        }
+        if recommendation:
+            return f"{issue['title']} {issue['summary']}"
+        return (
+            f"{issue['title']} {issue['summary']} The agent stopped safely and did "
+            "not create an approval."
+        )
 
     def get_context_bundle(self, run_id: str) -> dict[str, Any]:
         run = self.get_run(run_id)
@@ -212,6 +239,7 @@ class NourishOpsService:
             "decision_trace_version": "decision-trace/1.0.0",
             "recommendation_package_version": "recommendation-package/1.0.0",
             "agent": self.agent.describe().model_dump(mode="json"),
+            "operations_agent": self.operations_agent.describe().model_dump(mode="json"),
             "reviewer": self.reviewer.describe().model_dump(mode="json"),
             "supported_agent_providers": ["offline", "anthropic", "openai"],
             "agent_authority": "READ_ONLY_RECOMMENDATION_AND_REVIEW",
@@ -337,17 +365,38 @@ class NourishOpsService:
         package = build_recommendation_package(result, run["context"], solver.descriptor)
         orchestrator_started = perf_counter_ns()
         agent_outcome = self.agent.explain(package) if package is not None else None
+        safe_stop_outcome = None
+        if package is None and result["decision_status"] == "ABSTAINED":
+            safe_stop_item = build_work_item(
+                run["scenario_key"], result, run["context"],
+            ).model_dump(mode="json")
+            safe_stop_outcome = self.operations_agent.route(
+                [{
+                    "role": "user",
+                    "content": "Review the conflicting records and identify the safe next step.",
+                }],
+                [safe_stop_item],
+                safe_stop_item["work_item_id"],
+            )
         orchestrator_duration_ms = (perf_counter_ns() - orchestrator_started) // 1_000_000
-        agent_metadata = agent_outcome.metadata if agent_outcome else self.agent.describe()
+        agent_metadata = (
+            agent_outcome.metadata if agent_outcome
+            else safe_stop_outcome.metadata if safe_stop_outcome
+            else self.agent.describe()
+        )
         orchestrator_output_hash = (
             sha256(agent_outcome.explanation.model_dump(mode="json"))
             if agent_outcome else None
         )
+        if safe_stop_outcome is not None:
+            orchestrator_output_hash = sha256(
+                safe_stop_outcome.selection.model_dump(mode="json")
+            )
         trace_stages.append(DecisionTraceStage(
             stage="DECISION_ORCHESTRATOR",
             actor="AI_AGENT",
             status=(
-                "SKIPPED" if package is None
+                "SKIPPED" if package is None and safe_stop_outcome is None
                 else "FALLBACK" if agent_metadata.fallback_code
                 else "PASSED"
             ),
@@ -355,7 +404,9 @@ class NourishOpsService:
             input_sha256=analysis_output_hash,
             output_sha256=orchestrator_output_hash,
             summary=(
-                "No recommendation required an explanation."
+                "The operations agent matched the unresolved conflict to a safe-stop flow."
+                if safe_stop_outcome is not None
+                else "No recommendation required an explanation."
                 if package is None
                 else "The orchestrator produced a schema-validated, evidence-grounded explanation."
             ),
@@ -418,7 +469,11 @@ class NourishOpsService:
             output_sha256=analysis_output_hash,
             summary="The backend confirmed that AI did not calculate, rank, write, or execute.",
             details={
-                "recommendation_authority": "DETERMINISTIC_SOLVER",
+                "recommendation_authority": (
+                    "AI_AGENT_GROUNDED_BY_DETERMINISTIC_SOLVER"
+                    if package is not None
+                    else "POLICY_SAFE_STOP_MATCHED_BY_AI_AGENT"
+                ),
                 "write_authority": "APPLICATION_SERVICE",
                 "requires_human_approval": package is not None,
                 "external_writes_allowed": False,

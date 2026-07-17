@@ -8,6 +8,9 @@ through versioned scenario packages and registered deterministic solvers.
 flowchart LR
   Sources["Synthetic production-shaped sources"] --> Freeze["Immutable run input manifest"]
   Freeze --> Context["Versioned shared context bundle"]
+  Context --> Queue["Verified operational work items"]
+  Queue --> OpsAgent["Read-only operations routing agent"]
+  OpsAgent --> Home["Home / Ask decision entry"]
   Context --> Problem["Versioned scenario package and problem type"]
   Problem --> Solver["Deterministic solver registry"]
   Solver --> Verified["Verified recommendation package"]
@@ -30,16 +33,19 @@ flowchart LR
 | Source adapters | Retrieve versioned current and organizational records | Rank or approve actions |
 | Scenario package | Declare required documents, schemas, context builder, normalizer, problem type, solver, and result contract | Change a frozen run |
 | Deterministic solver | Math, projections, constraints, feasibility, ranking, abstention, and output hashes | Call an AI provider or external system |
-| Decision orchestrator | Retrieve one immutable recommendation package and explain it in typed prose | Calculate, rank, invent facts/IDs/numbers, approve, or execute |
+| Operations routing agent | Match a multi-turn user request to a verified work item and typed answer intent | Invent a case/fact/action, silently default an unrelated question, approve, or execute |
+| Decision orchestrator | Retrieve one immutable recommendation package and turn the selected verified candidate into the agent recommendation and typed rationale | Calculate, rank, invent facts/IDs/numbers, approve, or execute |
 | Independent reviewer | Recheck the grounded draft against a closed five-check verdict | Change deterministic results, write, or execute |
 | Authority validator | Enforce IDs, evidence, grounded language, approval, and simulation boundaries | Optimize or substitute an AI decision |
 | API | Validate commands, enforce idempotency and revision checks, return typed data | Trust frontend calculations |
 | Manager UI | Display verified results and collect an explicit human decision/feedback | Directly mutate audit records or provider prompts |
 | Simulated gateway | Convert an approved, hashed action intent into a typed completion receipt | Perform an external write or accept model-authored payloads |
 
-The AI is not the calculator. Two bounded roles sit around a verified decision result:
-the orchestrator creates the user-facing explanation, and an isolated reviewer checks
-that draft. If either provider call times out, returns invalid structure, cites an unknown
+The AI is not the calculator. Three bounded roles sit around verified decision data:
+the operations agent routes user intent, the orchestrator creates the user-facing agent
+recommendation, and an isolated reviewer checks that draft. The product-facing proposal
+is therefore truthfully labeled an agent recommendation, while its quantities, feasibility,
+and ranking remain deterministic guardrails. If a provider call times out, returns invalid structure, cites an unknown
 identifier, introduces a number, or claims execution, its wording is discarded and the
 same deterministic recommendation is rendered by the offline adapter. Primary
 explanation sentences are backend-authored grounded statements; a live provider may
@@ -51,8 +57,8 @@ It explicitly does not expose private chain-of-thought.
 
 ## Provider architecture
 
-The orchestrator and reviewer each supply a different closed output schema and a
-different read-only tool. `build_decision_agent` and `build_decision_reviewer`
+The operations agent, orchestrator, and reviewer each supply a different closed output
+schema and read-only tool. `build_operations_agent`, `build_decision_agent`, and `build_decision_reviewer`
 explicitly bind either an Anthropic or OpenAI provider client;
 the model string cannot switch providers. Provider SDK retries are disabled. The
 adapter owns one shared retry/repair budget inside one global deadline, then uses the
@@ -135,12 +141,15 @@ shape.
 
 ## API and reliability contract
 
-- `GET /api/v1/capabilities` exposes context builders, both agent roles, solver
+- `GET /api/v1/capabilities` exposes context builders, all three agent roles, solver
   capabilities, problem types, execution mode, and workflow versions.
 - `GET /api/v1/runs/{run_id}/context-bundle` returns the frozen shared context and
   provenance hash.
 - `GET /api/v1/runs/{run_id}/decision-brief` returns the stable Pydantic frontend model.
 - `GET /api/v1/runs/{run_id}/decision-trace` returns the five transparent decision stages.
+- `POST /api/v1/operations-assistant/messages` accepts bounded multi-turn history and
+  current context, then returns `ANSWER`, `CLARIFY`, `DECISION`, or `SAFE_STOP` with
+  agent metadata and backend-rendered verified facts.
 - Approval atomically stores one immutable action intent and one simulated completion
   receipt. It never accepts an AI-authored write payload.
 - `POST /api/v1/runs/{run_id}/outcome-feedback` records successful, partial, failed,

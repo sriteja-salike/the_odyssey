@@ -31,13 +31,15 @@ The target user is Jordan, a frequently interrupted food-bank operations coordin
 ### 0.2 Screen hierarchy
 
 1. Nourish Ops shell and persistent simulation notice.
-2. On Home: greeting, composer, lightweight prompt examples, then one Agent Briefing item.
+2. On Home: greeting, composer, lightweight prompt examples, then one item from `Today’s decision queue`; no recommendation appears before agent review.
 3. In a decision: plain-language issue label, headline, one-sentence explanation, and three-step journey.
 4. At most one compact visual (approximately 120–160px high) in the current/completed issue step.
 5. One recommended response and one primary action.
 6. Alternatives, rationale, evidence, assumptions, and technical context only through labeled disclosures.
 
-The assistant has a conventional open-source thread/composer structure but remains a separate focused route. Its verified case context and `Review response` handoff are always visible; there is no chat approval control.
+The assistant has a conventional open-source thread/composer structure but remains a separate focused route. Its context surface shows the typed agent outcome, live/fallback mode, verified-source count, safety recheck, and manager-approval boundary. Its handoff is `Open agent recommendation` or `Review blocking records`; there is no chat approval control.
+
+The review card begins with `Agent recommendation`, `Prepared by the Nourish Decision Agent`, and an honest mode tag. A compact verification strip states the verified record count, constraint result, and manager-approval requirement. Scenario E uses the same provenance language as `Agent-safe stop`, while its red blocked step and unavailable confirmation remain visually dominant. AI is communicated through provenance and bounded capabilities, never sparkles, avatars, glowing borders, or theatrical thinking animation.
 
 ### 0.3 Scenario visual mapping
 

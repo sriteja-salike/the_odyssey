@@ -18,8 +18,30 @@ class CreateRunRequest(BaseModel):
     parent_run_id: str | None = None
 
 
+class OperationsAssistantMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=1000)
+
+
 class OperationsAssistantRequest(BaseModel):
-    message: str = Field(min_length=1, max_length=1000)
+    model_config = ConfigDict(extra="forbid")
+
+    message: str | None = Field(default=None, min_length=1, max_length=1000)
+    messages: list[OperationsAssistantMessage] = Field(default_factory=list, max_length=12)
+    current_work_item_id: str | None = Field(default=None, max_length=100)
+
+    @model_validator(mode="after")
+    def require_conversation(self) -> OperationsAssistantRequest:
+        if not self.messages and not (self.message and self.message.strip()):
+            raise ValueError("A user message is required")
+        return self
+
+    def conversation(self) -> list[dict[str, str]]:
+        if self.messages:
+            return [item.model_dump(mode="json") for item in self.messages]
+        return [{"role": "user", "content": self.message.strip()}]  # type: ignore[union-attr]
 
 
 class DecisionRequest(BaseModel):

@@ -42,6 +42,18 @@ The assistant may answer a verified-data question and route Jordan into the matc
 
 Home uses operational titles such as `Protein coverage may fall below the safe minimum.` Scenario letters, fixture names, partner aliases, and demo memory tests never appear as the task label. `Continue to next item` advances the briefing without adding a card grid or queue dashboard.
 
+### 0.1.2 Agent-first decision contract
+
+The UI distinguishes three things Jordan should never have to infer:
+
+1. **Verified issue queue:** Home shows detected issues and blocking records only. It does not show a recommendation before an agent review has run.
+2. **Agent recommendation:** after evaluation, the Nourish Decision Agent turns the verified candidate package into the recommendation Jordan reviews. The surface names the effective agent mode, verified record count, safety check, and human-approval boundary.
+3. **Human decision:** approval, edit, reject, and defer remain explicit manager actions. The agent cannot submit them or perform an external action.
+
+The Ask route uses the open-source assistant-ui thread/composer pattern. Every request sends up to the last twelve user/assistant messages plus the current matched work item. The typed operations-agent result is one of `ANSWER`, `CLARIFY`, `DECISION`, or `SAFE_STOP`; it may select only a verified work-item ID. The backend, not the model, renders operational facts from the matched presentation contract. An unrelated or ambiguous request returns `CLARIFY` with no silently selected scenario. The conversation and matched work item survive a browser refresh within the tab.
+
+Live-provider output is labeled `Live agent · verified`. Provider failure produces the same work path through a visible `Verified fallback`; it never changes quantities, rankings, constraints, or approval authority. Scenario E is an agent-matched safe stop followed by a policy lock, with a direct `Ask agent how to resolve this` recovery path and no approval control.
+
 ### 0.2 Three-step journey
 
 The UI derives the active step from the backend run state; it does not persist a second workflow state.
@@ -61,7 +73,7 @@ The UI derives the active step from the backend run state; it does not persist a
 The active recommendation shows only the action, quantity, simulated cost, timing when relevant, operational effect, and `Review and approve`.
 
 - `Show other options` reveals verified feasible alternatives and selection controls.
-- `Why was this suggested?` reveals concise rationale and uncertainty.
+- `Why did the agent suggest this?` reveals concise rationale and uncertainty.
 - `More details` reveals confidence, constraints, rejected options, evidence titles, source IDs, and technical assumptions.
 - Reject and Defer live under `More actions`.
 - Quantity editing appears only when the backend marks the action editable. A custom amount is previewed by `POST /runs/{runId}/action-previews` before approval; offline mode permits only frozen evaluated quantities.

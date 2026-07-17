@@ -192,7 +192,7 @@ def _selected_action(
     if evaluation is None:
         return recommendation, None
     action_id = evaluation["action"]["action_id"]
-    catalog = next(
+    catalog: dict[str, Any] = next(
         (
             item for item in context["organizational_knowledge"]["action_catalog"]
             if item["action_id"] == action_id
@@ -484,6 +484,10 @@ def build_work_item(
         due_label=f"Review by {due}" if due else None,
         source_count=source_count,
         presentation=presentation,
-        primary_action_label="Review response" if state == "NEEDS_REVIEW" else "Review records" if state == "INFORMATION_NEEDED" else "View details",
+        primary_action_label=(
+            "Ask agent to review" if state == "NEEDS_REVIEW"
+            else "Review blocking records" if state == "INFORMATION_NEEDED"
+            else "View details"
+        ),
         synthetic=True,
     )

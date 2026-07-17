@@ -48,7 +48,7 @@ describe("core decision flow", () => {
 
   it("blocks Scenario E and renders no approval control", async () => {
     const run = oEvaluateRun(oCreateRun("E").run_id);
-    const { container } = render(<SafeStop status="ABSTAINED" brief={run.decision_brief!} onStartClean={() => undefined} />);
+    const { container } = render(<MemoryRouter><SafeStop status="ABSTAINED" brief={run.decision_brief!} onStartClean={() => undefined} /></MemoryRouter>);
     expect(screen.getByRole("heading", { name: "Choose a response" })).toBeInTheDocument();
     expect(screen.getByText("Blocked")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /approve/i })).not.toBeInTheDocument();

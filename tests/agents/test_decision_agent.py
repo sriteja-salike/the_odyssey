@@ -17,6 +17,7 @@ from nourishops.agents.contracts import (
     AgentAuthorityError,
     AgentExplanation,
     AgentMetadata,
+    grounded_primary_narrative,
 )
 from nourishops.agents.live import PydanticAIDecisionAgent, validate_explanation
 from nourishops.agents.offline import OfflineDecisionAgent
@@ -49,12 +50,13 @@ def scenario_b_package() -> dict[str, Any]:
 
 
 def valid_live_output(package: dict[str, Any]) -> dict[str, Any]:
+    grounded = grounded_primary_narrative(package)
     return {
         "recommendation_id": package["recommendation"]["recommendation_id"],
         "headline": package["selected_action"]["display_name"],
-        "why_now": "The verified short life capacity risk is active.",
-        "why_this_action": "This is the selected feasible catalog action.",
-        "uncertainty": "The outcome is simulated and requires manager approval.",
+        "why_now": grounded["why_now"],
+        "why_this_action": grounded["why_this_action"],
+        "uncertainty": grounded["uncertainty"],
         "why_not": [],
         "evidence_ids": package["selected_action"]["evidence_ids"],
         "requires_human_approval": True,

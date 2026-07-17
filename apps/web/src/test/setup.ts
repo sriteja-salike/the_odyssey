@@ -31,6 +31,7 @@ if (typeof window !== "undefined") {
   Object.defineProperty(window, "ResizeObserver", { configurable: true, value: TestResizeObserver });
   Object.defineProperty(globalThis, "ResizeObserver", { configurable: true, value: TestResizeObserver });
   Object.defineProperty(Element.prototype, "scrollIntoView", { configurable: true, value: () => undefined });
+  Object.defineProperty(Element.prototype, "scrollTo", { configurable: true, value: () => undefined });
   Object.defineProperty(HTMLElement.prototype, "clientWidth", { configurable: true, get: () => 800 });
   Object.defineProperty(HTMLElement.prototype, "clientHeight", { configurable: true, get: () => 160 });
 }

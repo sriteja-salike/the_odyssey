@@ -27,7 +27,7 @@ export interface AgentMetadata {
   requested_mode: "offline" | "live";
   effective_mode: "offline" | "live" | "offline_fallback";
   status: "verified" | "live_configured" | "live_verified" | "fallback";
-  role: "DECISION_ORCHESTRATOR" | "INDEPENDENT_REVIEWER";
+  role: "DECISION_ORCHESTRATOR" | "INDEPENDENT_REVIEWER" | "OPERATIONS_ASSISTANT";
   provider: string | null;
   model: string | null;
   prompt_version: string;
@@ -122,12 +122,24 @@ export interface WorkItem {
 }
 
 export interface OperationsAssistantResponse {
-  schema_version: "operations-assistant-response/1.0.0";
+  schema_version: "operations-assistant-response/2.0.0";
+  response_type: "ANSWER" | "CLARIFY" | "DECISION" | "SAFE_STOP";
   answer: string;
-  work_item: WorkItem;
+  work_item: WorkItem | null;
   suggested_questions: string[];
   authority_note: string;
+  agent: AgentMetadata;
+  guardrails: {
+    facts: string;
+    constraints: string;
+    approval: string;
+  };
   synthetic: true;
+}
+
+export interface OperationsAssistantMessage {
+  role: "user" | "assistant";
+  content: string;
 }
 
 export interface DecisionBrief {

@@ -70,7 +70,9 @@ class AgentMetadata(BaseModel):
     requested_mode: Literal["offline", "live"]
     effective_mode: Literal["offline", "live", "offline_fallback"]
     status: Literal["verified", "live_configured", "live_verified", "fallback"]
-    role: Literal["DECISION_ORCHESTRATOR", "INDEPENDENT_REVIEWER"] = (
+    role: Literal[
+        "DECISION_ORCHESTRATOR", "INDEPENDENT_REVIEWER", "OPERATIONS_ASSISTANT",
+    ] = (
         "DECISION_ORCHESTRATOR"
     )
     provider: str | None = None
@@ -135,11 +137,58 @@ class AgentAuthorityError(RuntimeError):
 
 def grounded_primary_narrative(package: dict[str, Any]) -> dict[str, str]:
     """Backend-authored prose choices; live models may copy but never invent them."""
-    risk_type = package["primary_risk"]["risk_type"].replace("_", " ").lower()
+    risk_type = package["primary_risk"]["risk_type"]
+    action_type = package["selected_action"]["action_type"]
+    why_now = {
+        "SHORTAGE": (
+            "A confirmed inbound delay puts category coverage below the safe minimum "
+            "during the planning horizon."
+        ),
+        "SHORT_LIFE_CAPACITY": (
+            "The short-life offer exceeds usable refrigerated capacity before the "
+            "food can be distributed safely."
+        ),
+        "DONATION_MISMATCH": (
+            "The offered category exceeds its target inventory and does not address "
+            "the current priority need."
+        ),
+        "BUDGET_TRADEOFF": (
+            "The available budget cannot cover every identified need, so the most "
+            "time-sensitive feasible response must be protected."
+        ),
+    }.get(
+        risk_type,
+        f"The verified {risk_type.replace('_', ' ').lower()} risk is active.",
+    )
+    why_this_action = {
+        "PURCHASE": (
+            "The agent selected the highest-ranked feasible purchase because it "
+            "improves the modeled shortfall without breaking the verified constraints."
+        ),
+        "REQUEST_TRANSFER": (
+            "The agent selected a transfer because it improves the modeled shortfall "
+            "while staying within the verified operating constraints."
+        ),
+        "TARGETED_DONOR_REQUEST": (
+            "The agent selected a targeted donor request because it addresses the "
+            "priority category within the verified constraints."
+        ),
+        "PARTIAL_ACCEPT": (
+            "The agent selected partial acceptance because it uses available cold "
+            "space while avoiding modeled overflow."
+        ),
+        "REDIRECT_DONATION": (
+            "The agent selected redirection because it avoids adding local surplus "
+            "while keeping the donation useful."
+        ),
+    }.get(
+        action_type,
+        "The agent selected this feasible catalog response after reviewing the verified candidates.",
+    )
     return {
-        "why_now": f"The verified {risk_type} risk is active.",
-        "why_this_action": "This is the selected feasible catalog action.",
-        "uncertainty": "The outcome is simulated and requires manager approval.",
+        "why_now": why_now,
+        "why_this_action": why_this_action,
+        "uncertainty": "The outcome is simulated and still requires manager approval.",
     }
 
 

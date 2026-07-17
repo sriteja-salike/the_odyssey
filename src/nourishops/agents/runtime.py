@@ -28,6 +28,11 @@ from nourishops.agents.contracts import (
 )
 from nourishops.agents.live import PydanticAIDecisionAgent
 from nourishops.agents.offline import OfflineDecisionAgent
+from nourishops.agents.operations import (
+    OfflineOperationsAgent,
+    PydanticAIOperationsAgent,
+    ResilientOperationsAgent,
+)
 from nourishops.agents.reviewer import (
     OfflineDecisionReviewer,
     PydanticAIDecisionReviewer,
@@ -272,4 +277,44 @@ def build_decision_reviewer(settings: Settings) -> ResilientDecisionReviewer:
     return ResilientDecisionReviewer(
         primary=primary,
         fallback=OfflineDecisionReviewer(),
+    )
+
+
+def build_operations_agent(settings: Settings) -> ResilientOperationsAgent:
+    """Build the read-only conversation router on the configured provider path."""
+    if settings.agent_mode != "live":
+        return ResilientOperationsAgent(
+            primary=None,
+            fallback=OfflineOperationsAgent(),
+        )
+
+    configuration = _live_configuration(settings)
+    if configuration is None:
+        metadata = AgentMetadata(
+            requested_mode="live",
+            effective_mode="offline_fallback",
+            status="fallback",
+            role="OPERATIONS_ASSISTANT",
+            provider=settings.agent_provider,
+            model=settings.agent_model,
+            prompt_version="operations-agent/1.0.0",
+            output_schema_version="operations-agent-output/1.0.0",
+            tool_contract_version="operations-agent-tools/1.0.0",
+            fallback_code="OPERATIONS_AGENT_CONFIG_MISSING_FALLBACK",
+        )
+        return ResilientOperationsAgent(
+            primary=None,
+            fallback=OfflineOperationsAgent(metadata),
+        )
+
+    provider, model, api_key = configuration
+    return ResilientOperationsAgent(
+        primary=PydanticAIOperationsAgent(
+            model_name=model,
+            provider=provider,
+            request_timeout_seconds=settings.agent_timeout_seconds,
+            deadline_seconds=settings.agent_deadline_seconds,
+            model=_provider_model(provider, model, api_key),
+        ),
+        fallback=OfflineOperationsAgent(),
     )

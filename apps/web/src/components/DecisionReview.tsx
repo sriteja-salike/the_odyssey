@@ -119,7 +119,11 @@ export default function DecisionReview({ runId, state, setState, brief, knowledg
             <div className="task-step__title"><div><span>Step 2</span><h2>Choose a response</h2></div><Tag type="blue">Current</Tag></div>
 
             <section className="recommended-choice" aria-labelledby="recommended-title">
-              <div className="recommended-choice__label"><StarFilled size={20} aria-hidden /> Best next step</div>
+              <div className="recommended-choice__label agent-recommendation-label">
+                <StarFilled size={20} aria-hidden />
+                <span><strong>Agent recommendation</strong><small>Prepared by the Nourish Decision Agent</small></span>
+                <Tag type={brief.agent.effective_mode === "live" ? "blue" : "cool-gray"} size="sm">{agentStatusLabel(brief.agent)}</Tag>
+              </div>
               <h3 id="recommended-title">{selectedTitle}</h3>
               {nonDefault && <Tag type="purple" size="sm">Manager-selected response</Tag>}
               <dl className="choice-facts">
@@ -131,6 +135,12 @@ export default function DecisionReview({ runId, state, setState, brief, knowledg
               {presentation.recommendation.caution && selected.action_id === recommended.action.action_id && (
                 <p className="choice-caution"><WarningAlt size={18} aria-hidden /> {presentation.recommendation.caution}</p>
               )}
+
+              <div className="agent-verification" aria-label="Recommendation verification">
+                <span><CheckmarkFilled size={16} aria-hidden />{brief.evidence.length} verified records checked</span>
+                <span><CheckmarkFilled size={16} aria-hidden />Safety constraints passed</span>
+                <span><Locked size={16} aria-hidden />Manager approval required</span>
+              </div>
 
               {nonDefault && (
                 <TextArea
@@ -177,8 +187,9 @@ export default function DecisionReview({ runId, state, setState, brief, knowledg
             </section>
 
             <details className="plain-disclosure">
-              <summary>Why was this suggested?</summary>
+              <summary>Why did the agent suggest this?</summary>
               <div className="disclosure-content">
+                {nonDefault && <p><strong>This reasoning supports the original agent recommendation.</strong></p>}
                 <p>{brief.rationale?.why_now}</p>
                 <p>{brief.rationale?.why_this_action}</p>
                 <small>{brief.rationale?.uncertainty}</small>
@@ -190,6 +201,8 @@ export default function DecisionReview({ runId, state, setState, brief, knowledg
               <div className="disclosure-content technical-details">
                 <dl>
                   <div><dt>Confidence</dt><dd>{titleCase(recommended.confidence_label)}</dd></div>
+                  <div><dt>Decision agent</dt><dd>{agentStatusLabel(brief.agent)}{brief.agent.provider ? ` · ${brief.agent.provider}` : ""}</dd></div>
+                  <div><dt>Agent tool</dt><dd>{brief.agent.tool_calls.length ? brief.agent.tool_calls.join(", ") : "Verified local package reader"}</dd></div>
                   <div><dt>Safety checks</dt><dd>Feasible · human approval required · simulation only</dd></div>
                   <div><dt>Source records</dt><dd>{recommended.action.evidence_ids.join(", ") || "See audit record"}</dd></div>
                 </dl>
@@ -249,6 +262,12 @@ function plainActionTitle(action: DecisionBrief["alternatives"][number]): string
     DECLINE_DONATION: `Decline the ${category.toLowerCase()} offer`,
     MONITOR: `Continue monitoring ${category.toLowerCase()}`,
   } as Record<string, string>)[action.action_type] ?? action.display_name;
+}
+
+function agentStatusLabel(agent: DecisionBrief["agent"]): string {
+  if (agent.effective_mode === "live" && agent.status === "live_verified") return "Live agent · verified";
+  if (agent.effective_mode === "offline_fallback") return "Verified fallback";
+  return "Verified local agent";
 }
 
 function ReasonDialog({ mode, onClose, onConfirm }: { mode: "reject" | "defer"; onClose: () => void; onConfirm: (value: string) => void }) {

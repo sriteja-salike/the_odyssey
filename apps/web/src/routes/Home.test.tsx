@@ -29,7 +29,7 @@ const item: WorkItem = {
   due_label: "Review by Aug 10",
   source_count: 7,
   presentation: buildDecisionPresentation("A"),
-  primary_action_label: "Review response",
+  primary_action_label: "Ask agent to review",
   synthetic: true,
 };
 
@@ -51,7 +51,7 @@ describe("adaptive operations home", () => {
     );
 
     expect(await screen.findByRole("heading", { name: "Protein coverage may fall below the safe minimum." })).toBeInTheDocument();
-    expect(screen.getByText("I found one issue that may need a decision")).toBeInTheDocument();
+    expect(screen.getByText("Verified issue ready for agent review")).toBeInTheDocument();
     expect(screen.queryByText(/USDA protein shipment delay/i)).not.toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole("button", { name: "Are any deliveries at risk?" }));
     expect(screen.getByText(/Route: \/assistant\?prompt=Are%20any%20deliveries%20at%20risk%3F/)).toBeInTheDocument();
@@ -70,7 +70,7 @@ describe("adaptive operations home", () => {
       </MemoryRouter>,
     );
 
-    await userEvent.setup().click(await screen.findByRole("button", { name: "Review response" }));
+    await userEvent.setup().click(await screen.findByRole("button", { name: "Ask agent to review" }));
     await waitFor(() => expect(mocks.startWorkItem).toHaveBeenCalledWith(item));
     expect(screen.getByText("Route: /runs/run_scn-a_test")).toBeInTheDocument();
   });

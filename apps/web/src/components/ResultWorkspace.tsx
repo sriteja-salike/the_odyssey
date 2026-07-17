@@ -84,7 +84,7 @@ function ApprovedResult({ letter, runId, decision, execution, feedbackRecorded, 
         </div>
       </details>
 
-      <div className="result-actions"><Button kind="ghost" renderIcon={Renew} onClick={onReset}>Start clean run</Button></div>
+      <div className="result-actions"><Button as={Link} to="/">Return to Today</Button><Button kind="ghost" renderIcon={Renew} onClick={onReset}>Start clean run</Button></div>
       <p className="journey-reassurance"><Locked size={16} aria-hidden /> Simulation only — no real order was placed.</p>
     </div>
   );
@@ -105,7 +105,7 @@ function UnappliedResult({ runId, decision, feedbackRecorded, onReset }: Props) 
         <li className="task-step task-step--blocked"><div className="task-step__marker"><WarningAlt size={20} aria-hidden /></div><div className="task-step__body"><div className="task-step__title"><div><span>Step 3</span><h2>Confirm</h2></div><Tag type="warm-gray">Recorded</Tag></div><p>{rejected ? "The recommendation was rejected." : "The decision was deferred for later review."}</p>{decision.reason && <blockquote>{decision.reason}</blockquote>}</div></li>
       </ol>
       <details className="plain-disclosure recommendation-feedback-disclosure"><summary>Give feedback on this recommendation</summary><RecommendationFeedback runId={runId} recorded={feedbackRecorded} /></details>
-      <div className="result-actions"><Button as={Link} kind="tertiary" to={`/runs/${runId}/audit`}>Open audit record</Button><Button kind="ghost" renderIcon={Renew} onClick={onReset}>Start clean run</Button></div>
+      <div className="result-actions"><Button as={Link} to="/">Return to Today</Button><Button as={Link} kind="tertiary" to={`/runs/${runId}/audit`}>Open audit record</Button><Button kind="ghost" renderIcon={Renew} onClick={onReset}>Start clean run</Button></div>
       <p className="journey-reassurance"><Locked size={16} aria-hidden /> No external action was taken.</p>
     </div>
   );

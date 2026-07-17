@@ -75,7 +75,7 @@ def test_data_reconciliation_has_no_recommendation_or_approval_route() -> None:
     assert view.visual.conflicts[0].message == "Shipment status is missing."
     assert view.visual.conflicts[-1].message == "Shipment quantity differs across sources."
     assert item.state == "INFORMATION_NEEDED"
-    assert item.primary_action_label == "Review records"
+    assert item.primary_action_label == "Review blocking records"
 
 
 def test_work_item_uses_general_case_identity_and_verified_sources() -> None:

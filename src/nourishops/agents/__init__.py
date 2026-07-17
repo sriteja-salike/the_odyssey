@@ -12,6 +12,7 @@ from nourishops.agents.runtime import (
     ResilientDecisionReviewer,
     build_decision_agent,
     build_decision_reviewer,
+    build_operations_agent,
 )
 
 __all__ = [
@@ -22,4 +23,5 @@ __all__ = [
     "ResilientDecisionReviewer",
     "build_decision_agent",
     "build_decision_reviewer",
+    "build_operations_agent",
 ]

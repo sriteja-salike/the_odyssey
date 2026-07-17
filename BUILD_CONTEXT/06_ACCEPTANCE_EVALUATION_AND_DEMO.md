@@ -22,6 +22,21 @@ P0 passes only when:
 
 The proof-of-concept may be durable and repeatable without being production-ready or validated on real food-bank operations.
 
+### 1.1 Strong demo journey
+
+The judge path begins at Home and demonstrates the product from Jordan's point of view:
+
+1. Home shows a plain-language verified issue queue, not scenario fixtures or premature recommendations.
+2. Ask accepts a natural question, returns a typed agent match, and preserves context through one follow-up and refresh.
+3. An unrelated question yields clarification and no default scenario.
+4. Opening review invokes the decision agent; the review visibly identifies live or fallback mode, verified records, deterministic safety checks, and manager authority.
+5. Scenario A completes approval, simulated receipt, before/after result, outcome feedback, and `Return to Today`.
+6. Scenario E shows an agent-matched safe stop, exact conflicting records, no approval control, and a correction-assistance path.
+7. Audit shows the deterministic solver, decision agent, reviewer, authority validator, tool names, modes, and fallbacks without private chain-of-thought.
+8. Repeating the path with the provider unavailable preserves the same deterministic recommendation and exposes the verified fallback honestly.
+
+The demo fails if chat loses the matched work item, a broad/irrelevant prompt silently becomes Scenario A, Home labels a solver preview as an agent recommendation, agent provenance is hidden, or a safe-stop state exposes approval.
+
 ---
 
 ## 2. P0 requirement index and build-contract crosswalk

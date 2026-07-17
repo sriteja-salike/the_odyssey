@@ -1,4 +1,5 @@
 import { Button, Tag } from "@carbon/react";
+import { Link } from "react-router-dom";
 import { CheckmarkFilled, Locked, Renew, WarningAlt } from "@carbon/icons-react";
 import type { DecisionBrief } from "../lib/liveApi";
 import type { DecisionStatus } from "../types/golden";
@@ -37,6 +38,16 @@ export default function SafeStop({
             : "No recommendation or simulated action was recorded."}</p>
       </header>
 
+      {abstained && brief && (
+        <div className="safe-stop-provenance">
+          <CheckmarkFilled size={20} aria-hidden />
+          <div>
+            <strong>Agent-safe stop</strong>
+            <span>{safeStopAgentLabel(brief)} matched the conflict; the policy engine locked approval until the records agree.</span>
+          </div>
+        </div>
+      )}
+
       <ol className="task-list">
         <li className="task-step task-step--complete">
           <div className="task-step__marker"><CheckmarkFilled size={20} aria-hidden /></div>
@@ -56,10 +67,21 @@ export default function SafeStop({
       </ol>
 
       <div className="safe-actions">
+        {abstained && <Button as={Link} kind="secondary" to="/assistant?prompt=What%20needs%20to%20be%20corrected%20in%20these%20conflicting%20records%3F">Ask agent how to resolve this</Button>}
         {onRetry && <Button renderIcon={Renew} onClick={onRetry}>Run the check again</Button>}
         <Button kind={onRetry ? "tertiary" : "primary"} onClick={onStartClean}>Start clean run</Button>
       </div>
       <p className="journey-reassurance"><Locked size={16} aria-hidden /> No external action was taken.</p>
     </div>
   );
+}
+
+function safeStopAgentLabel(brief: DecisionBrief): string {
+  if (brief.agent.effective_mode === "live" && brief.agent.status === "live_verified") {
+    return "The live operations agent";
+  }
+  if (brief.agent.effective_mode === "offline_fallback") {
+    return "The verified fallback agent";
+  }
+  return "The verified local agent";
 }

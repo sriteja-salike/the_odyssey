@@ -82,7 +82,7 @@ export default function Audit() {
             <div className="process-head">
               <div>
                 <p className="eyebrow">Agent transparency</p>
-                <h2 className="sec">How this recommendation was produced</h2>
+                <h2 className="sec">{trace.final_status === "ABSTAINED" ? "How this safe stop was produced" : "How this recommendation was produced"}</h2>
                 <p className="hint">Verified stage records and timings—not private chain-of-thought.</p>
               </div>
               <Tag type="green" size="sm">{trace.final_status}</Tag>
@@ -153,6 +153,7 @@ function humanize(value: string): string {
 }
 
 function stageRuntime(stage: DecisionTraceStage): string | null {
+  if (stage.status === "SKIPPED") return null;
   const mode = stage.details.effective_mode;
   const provider = stage.details.provider;
   const model = stage.details.model;

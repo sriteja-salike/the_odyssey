@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { InlineLoading } from "@carbon/react";
-import { ArrowRight, ArrowUp, CheckmarkFilled, DataReference, Time } from "@carbon/icons-react";
+import { ArrowRight, ArrowUp, DataReference, Time } from "@carbon/icons-react";
 import ProductShell from "../components/ProductShell";
 import { getWorkItems, startWorkItem, type WorkItem } from "../lib/liveApi";
 
@@ -88,7 +88,7 @@ export default function Home() {
         </section>
 
         <section className="agent-briefing" aria-labelledby="briefing-label">
-          <div className="briefing-rule"><span id="briefing-label">Agent briefing</span></div>
+          <div className="briefing-rule"><span id="briefing-label">Today’s decision queue</span></div>
           {loading && <div className="briefing-loading"><InlineLoading description="Checking verified operations data…" /></div>}
           {error && <div className="service-error" role="alert">{error}</div>}
           {active && (
@@ -96,8 +96,8 @@ export default function Home() {
               <div className="briefing-card__intro">
                 <span className={`briefing-indicator briefing-indicator--${active.state.toLowerCase()}`} aria-hidden />
                 <div>
-                  <p>{active.state === "INFORMATION_NEEDED" ? "I found records that need to be resolved" : "I found one issue that may need a decision"}</p>
-                  <small>{activeIndex + 1} of {items.length} items in this briefing</small>
+                  <p>{active.state === "INFORMATION_NEEDED" ? "Verified records need to be resolved" : "Verified issue ready for agent review"}</p>
+                  <small>{activeIndex + 1} of {items.length} items in the current queue</small>
                 </div>
               </div>
               <div className="briefing-card__body">
@@ -111,15 +111,9 @@ export default function Home() {
                   </div>
                 </div>
                 <button type="button" className="briefing-primary" onClick={() => void openCurrent()} disabled={opening}>
-                  {opening ? "Preparing response…" : active.primary_action_label}<ArrowRight size={19} aria-hidden />
+                  {opening ? "Agent is reviewing…" : active.primary_action_label}<ArrowRight size={19} aria-hidden />
                 </button>
               </div>
-              {active.presentation.recommendation && (
-                <div className="briefing-recommendation">
-                  <CheckmarkFilled size={18} aria-hidden />
-                  <span><strong>Suggested response:</strong> {active.presentation.recommendation.title}</span>
-                </div>
-              )}
               <div className="briefing-questions">
                 {active.presentation.suggested_questions.slice(0, 2).map((question) => (
                   <button key={question} type="button" onClick={() => ask(`${question} ${active.presentation.issue.title}`)}>{question}<ArrowRight size={16} /></button>
