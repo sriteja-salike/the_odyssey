@@ -137,7 +137,7 @@ def _constraints_supply(snap: Snapshot, a: Action, ctx: Context,
                        "limit": str(cents(budget)), "unit": "USD"})
     if idx is not None and not (1 <= idx <= HORIZON):
         codes.append("ARRIVES_IN_HORIZON")
-    breach = ctx.breach_week.get(a.category_id)
+    breach = ctx.breach_week.get(a.category_id) if a.category_id is not None else None
     if idx is not None and breach is not None and idx > breach:
         codes.append("ARRIVES_BY_BREACH")
         detail.append({"code": "ARRIVES_BY_BREACH", "observed": a.arrival_week_start,
@@ -170,6 +170,7 @@ def _constraints_offer(snap: Snapshot, a: Action, ctx: Context,
     codes: list[str] = []
     detail: list[dict] = []
     offer = ctx.offer
+    assert offer is not None
     if a.category_id != offer.category_id:
         codes.append("CATEGORY_MATCH")
     if cents(a.computed_cost) > snap.warehouse.budget_usd:
@@ -205,6 +206,7 @@ def _constraints_offer(snap: Snapshot, a: Action, ctx: Context,
 def _score_supply(snap, a, ctx, forecast, base_cons, base_exp, base_cov_exp,
                   base_peaks, base_bcons, base_bexp) -> Eval:
     cat = a.category_id
+    assert cat is not None
     lots = _supply_lots(snap, a)
     act_cons_cat = project_category(snap, cat, forecast[cat], "conservative", lots)
     act_exp_all = project_all(snap, forecast, "expected", lots)
@@ -217,6 +219,7 @@ def _score_supply(snap, a, ctx, forecast, base_cons, base_exp, base_cov_exp,
     act_cov = coverage(snap, forecast, act_exp_all)["horizon"]
     M = clamp01(div(act_cov - base_cov_exp, max(ONE - base_cov_exp, CENT)))
     idx = _arrival_index(snap, a)
+    assert idx is not None
     T = clamp01(ONE - div(Decimal(idx - 1), max(Decimal(ctx.breach_week[cat]), ONE)))
     P = a.success_probability if a.action_type == "TARGETED_DONOR_REQUEST" else ONE
     E = (Decimal("0.40") * _cost_headroom(cents(a.computed_cost), snap.warehouse.budget_usd)
@@ -345,9 +348,17 @@ def evaluate_actions(snap, ctx, forecast, base_cons, base_exp, base_peaks) -> li
 
 def _rank(evals: list[Eval]) -> None:
     feasible = [e for e in evals if e.feasible and e.score is not None]
-    feasible.sort(key=lambda e: (
-        -e.score, -e.components["R"], -e.burden_reduction_cons, e.cost_usd,
-        e.action.requested_lb, TYPE_ORDER.index(e.action.action_type), e.action.action_id,
-    ))
+
+    def ranking_key(evaluation: Eval):
+        assert evaluation.score is not None
+        assert evaluation.components is not None
+        return (
+            -evaluation.score, -evaluation.components["R"],
+            -evaluation.burden_reduction_cons, evaluation.cost_usd,
+            evaluation.action.requested_lb,
+            TYPE_ORDER.index(evaluation.action.action_type), evaluation.action.action_id,
+        )
+
+    feasible.sort(key=ranking_key)
     for i, e in enumerate(feasible, 1):
         e.rank = i

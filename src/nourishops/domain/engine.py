@@ -38,11 +38,16 @@ def _forecast_stability(snap: Snapshot, cats: list[str]) -> Decimal:
 
 
 def _confidence(snap, ctx, top: Eval, second: Eval | None, warnings: int) -> dict:
+    assert top.components is not None
+    assert top.score is not None
     reliability = top.components["P"]
     data_quality = ONE if warnings == 0 else Decimal("0.75")
     forecast_stability = _forecast_stability(snap, ctx.fs_categories)
-    rank_margin = ONE if (second is None or second.score is None) \
-        else clamp01(div(top.score - second.score, Decimal(100)))
+    if second is None:
+        rank_margin = ONE
+    else:
+        assert second.score is not None
+        rank_margin = clamp01(div(top.score - second.score, Decimal(100)))
     value = (Decimal("0.35") * reliability + Decimal("0.25") * data_quality
              + Decimal("0.20") * forecast_stability + Decimal("0.10") * ONE
              + Decimal("0.10") * rank_margin)
@@ -121,7 +126,11 @@ def analyze(snap: Snapshot) -> dict:
     ctx = _build_context(snap, primary, shortages)
     evals = evaluate_actions(snap, ctx, forecast, cons, exp, peaks)
     result["action_evaluations"] = evals
-    ranked = sorted((e for e in evals if e.rank is not None), key=lambda e: e.rank)
+    def rank_value(evaluation: Eval) -> int:
+        assert evaluation.rank is not None
+        return evaluation.rank
+
+    ranked = sorted((e for e in evals if e.rank is not None), key=rank_value)
     result["ranking"] = [e.action.action_id for e in ranked]
     if not ranked:
         result["decision_status"] = "ABSTAINED"

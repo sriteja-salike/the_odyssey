@@ -7,10 +7,12 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
+import psycopg
 
 from nourishops.agents.contracts import AgentMetadata
 from nourishops.agents.offline import OfflineDecisionAgent
-from nourishops.application.service import NourishOpsService
+from nourishops.application.service import ApplicationError, NourishOpsService
+from nourishops.application.scenario_registry import ScenarioRegistry
 from nourishops.persistence.postgres import PostgresStore
 
 DATABASE_URL = os.environ.get("NOURISHOPS_TEST_DATABASE_URL")
@@ -54,20 +56,42 @@ def test_scenario_a_lifecycle_from_seeded_sources() -> None:
     assert recommendation["action_id"] == "ACT-A-PURCHASE-PROTEIN-15000"
     assert recommendation["requested_quantity_lb"] == 15000
     assert recommendation["cost_usd"] == "12750.00"
+    assert run["decision_trace"]["final_status"] == "PASSED"
+    assert [stage["stage"] for stage in run["decision_trace"]["stages"]] == [
+        "CONTEXT_FROZEN",
+        "DETERMINISTIC_SOLVER",
+        "DECISION_ORCHESTRATOR",
+        "INDEPENDENT_REVIEWER",
+        "AUTHORITY_VALIDATOR",
+    ]
+    assert run["reviewer"]["role"] == "INDEPENDENT_REVIEWER"
 
     run = service.decide(
         run["run_id"], "approve", recommendation["action_id"],
         recommendation["requested_quantity_lb"], None,
     )
     assert run["state"] == "APPROVED"
-    assert run["execution"]["status"] == "SIMULATED_SUBMITTED"
+    assert run["action_intent"]["recommendation_id"] == recommendation["recommendation_id"]
+    assert run["action_intent"]["external_write_allowed"] is False
+    assert run["execution_receipt"]["status"] == "SIMULATED_COMPLETED"
+    assert run["execution"]["status"] == "SIMULATED_COMPLETED"
     assert run["execution"]["external_write_performed"] is False
 
     feedback = service.record_feedback(run["run_id"], "HELPFUL", "Clear next step", {})
     assert feedback["rating"] == "HELPFUL"
+    outcome = service.record_outcome_feedback(
+        run["run_id"], "SUCCESSFUL", 15000, "12750.00", None, {"on_time": True},
+    )
+    assert outcome["outcome"] == "SUCCESSFUL"
     assert [event["event_type"] for event in store.get_events(run["run_id"])] == [
-        "RUN_CREATED", "SCENARIO_VALIDATED", "RECOMMENDATION_PREPARED", "MANAGER_APPROVED",
-        "SIMULATED_ACTION_APPLIED", "RECOMMENDATION_FEEDBACK",
+        "RUN_CREATED",
+        "SCENARIO_VALIDATED",
+        "DECISION_TRACE_RECORDED",
+        "RECOMMENDATION_PREPARED",
+        "MANAGER_APPROVED",
+        "SIMULATED_ACTION_COMPLETED",
+        "RECOMMENDATION_FEEDBACK",
+        "OUTCOME_FEEDBACK_RECORDED",
     ]
 
 
@@ -116,6 +140,12 @@ def test_scenario_b_short_life_offer_lifecycle() -> None:
     )
     assert run["decision_brief"]["solver"]["method"] == "CATALOG_ENUMERATION"
     assert run["decision_brief"]["agent"]["effective_mode"] == "offline"
+    reviewer_stage = next(
+        stage for stage in run["decision_trace"]["stages"]
+        if stage["stage"] == "INDEPENDENT_REVIEWER"
+    )
+    assert reviewer_stage["status"] == "PASSED"
+    assert reviewer_stage["details"]["verdict"] == "PASS"
 
     unsafe_preview = service.preview_action(
         run["run_id"], "ACT-B-PARTIAL-PRODUCE-10000", 11000,
@@ -129,7 +159,7 @@ def test_scenario_b_short_life_offer_lifecycle() -> None:
     )
     assert run["state"] == "APPROVED"
     assert run["execution"]["execution_type"] == "PARTIAL_DONATION_ACCEPTANCE_REQUEST"
-    assert run["execution"]["status"] == "SIMULATED_SUBMITTED"
+    assert run["execution"]["status"] == "SIMULATED_COMPLETED"
     assert run["execution"]["external_write_performed"] is False
 
     feedback = service.record_feedback(
@@ -192,6 +222,84 @@ def test_run_inputs_remain_frozen_after_connector_refresh() -> None:
 
 
 @pytest.mark.skipif(not DATABASE_URL, reason="set NOURISHOPS_TEST_DATABASE_URL for PostgreSQL integration")
+def test_run_replays_its_pinned_package_after_live_registry_changes() -> None:
+    store = PostgresStore(DATABASE_URL)
+    store.migrate()
+    store.seed_integrations()
+    run = NourishOpsService(store).create_run("scenario_b")
+
+    original = ScenarioRegistry.load().get("scenario_b")
+    changed = original.model_copy(update={"normalizer_id": "different-normalizer"})
+    changed_store = PostgresStore(DATABASE_URL, ScenarioRegistry([changed]))
+
+    replayed = changed_store.load_run_scenario(run["run_id"])
+    assert replayed.scenario_id == run["scenario_id"]
+    with pytest.raises(psycopg.errors.RaiseException, match="append-only"):
+        with store.connect() as connection:
+            connection.execute(
+                """UPDATE nourishops_app.run_contract_snapshots
+                   SET package_definition = '{}'::jsonb WHERE run_id = %s""",
+                (run["run_id"],),
+            )
+
+
+@pytest.mark.skipif(not DATABASE_URL, reason="set NOURISHOPS_TEST_DATABASE_URL for PostgreSQL integration")
+def test_package_source_ownership_prevents_cross_source_substitution() -> None:
+    store = PostgresStore(DATABASE_URL)
+    store.migrate()
+    store.seed_integrations()
+    rogue_source = f"rogue-{uuid4().hex}"
+    rogue_version = f"rogue/{uuid4().hex}"
+    with store.connect() as connection:
+        payload = connection.execute(
+            """SELECT payload_text FROM integration.snapshots
+               WHERE source_id = 'warehouse-wms' AND document_id = 'warehouse.json'
+               ORDER BY observed_at_utc DESC LIMIT 1"""
+        ).fetchone()["payload_text"]
+        changed = json.loads(payload)
+        changed["record"]["capacity_lb"]["REFRIGERATED"] = 99999
+        rogue_payload = json.dumps(changed, separators=(",", ":"))
+        connection.execute(
+            """INSERT INTO integration.sources
+               (source_id, display_name, source_kind, refresh_mode)
+               VALUES (%s, 'Rogue source', 'CURRENT_KNOWLEDGE', 'TEST')""",
+            (rogue_source,),
+        )
+        connection.execute(
+            """INSERT INTO integration.snapshots
+               (source_id, document_id, payload_text, source_version,
+                observed_at_utc, payload_sha256)
+               VALUES (%s, 'warehouse.json', %s, %s, %s, %s)""",
+            (
+                rogue_source,
+                rogue_payload,
+                rogue_version,
+                datetime(2040, 1, 1, tzinfo=UTC),
+                hashlib.sha256(rogue_payload.encode()).hexdigest(),
+            ),
+        )
+    try:
+        run = NourishOpsService(store).create_run("scenario_b")
+        assert run["context"]["organizational_knowledge"]["warehouse_constraints"][
+            "capacity_lb"
+        ]["REFRIGERATED"] == 40000
+        warehouse_input = next(
+            item for item in run["input_manifest"]
+            if item["document_id"] == "warehouse.json"
+        )
+        assert warehouse_input["source_id"] == "warehouse-wms"
+    finally:
+        with store.connect() as connection:
+            connection.execute(
+                "DELETE FROM integration.snapshots WHERE source_version = %s",
+                (rogue_version,),
+            )
+            connection.execute(
+                "DELETE FROM integration.sources WHERE source_id = %s", (rogue_source,),
+            )
+
+
+@pytest.mark.skipif(not DATABASE_URL, reason="set NOURISHOPS_TEST_DATABASE_URL for PostgreSQL integration")
 def test_live_wording_cannot_change_the_deterministic_decision() -> None:
     store = PostgresStore(DATABASE_URL)
     store.migrate()
@@ -224,3 +332,48 @@ def test_abstention_never_invokes_the_agent() -> None:
     assert run["decision_brief"]["recommendation"] is None
     assert run["decision_brief"]["rationale"] is None
     assert run["decision_brief"]["approval"]["required"] is False
+
+
+@pytest.mark.skipif(not DATABASE_URL, reason="set NOURISHOPS_TEST_DATABASE_URL for PostgreSQL integration")
+def test_action_loop_records_are_immutable_and_outcome_requires_a_receipt() -> None:
+    store = PostgresStore(DATABASE_URL)
+    store.migrate()
+    store.seed_integrations()
+    service = NourishOpsService(store)
+
+    draft = service.create_run("scenario_b")
+    with pytest.raises(ApplicationError) as missing_receipt:
+        service.record_outcome_feedback(
+            draft["run_id"], "SUCCESSFUL", None, None, None, {},
+        )
+    assert missing_receipt.value.code == "NO_EXECUTION_RECEIPT"
+
+    run = service.evaluate(draft["run_id"])
+    recommendation = run["analysis"]["recommended_action"]
+    approved = service.decide(
+        run["run_id"],
+        "approve",
+        recommendation["action_id"],
+        recommendation["requested_quantity_lb"],
+        None,
+    )
+    service.record_outcome_feedback(
+        run["run_id"], "SUCCESSFUL", None, None, None, {},
+    )
+
+    guarded_updates = [
+        (
+            "UPDATE nourishops_app.action_intents SET action_id = 'changed' "
+            "WHERE action_intent_id = %s",
+            approved["action_intent"]["action_intent_id"],
+        ),
+        (
+            "UPDATE nourishops_app.simulated_executions SET status = 'changed' "
+            "WHERE execution_id = %s",
+            approved["execution_receipt"]["execution_id"],
+        ),
+    ]
+    for statement, record_id in guarded_updates:
+        with pytest.raises(psycopg.errors.RaiseException, match="append-only"):
+            with store.connect() as connection:
+                connection.execute(statement, (record_id,))

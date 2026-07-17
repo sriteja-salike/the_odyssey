@@ -16,7 +16,14 @@ import { Check, X, AlertTriangle, ShieldCheck, ICON, ICON_SM } from "../componen
 import { getGolden, getActionMap, getOverlay, type ScenarioLetter, type ActionRecord } from "../lib/api";
 import { letterFromRunId } from "../lib/run";
 import { useRunState, type Decision, type RunState } from "../lib/runState";
-import { createRun, decideRun, evaluateRun, getRun, type LiveRun } from "../lib/liveApi";
+import {
+  createRun,
+  decideRun,
+  evaluateRun,
+  getRun,
+  type DecisionBrief,
+  type LiveRun,
+} from "../lib/liveApi";
 import { CATEGORY_LABEL } from "../lib/categories";
 import { lb, usd, weeks, wos, date, dateShort, weekLabel, titleCase, int } from "../lib/format";
 import type { ConservativeWeek, ExpectedWeek } from "../types/golden";
@@ -41,7 +48,7 @@ export default function DecisionWorkspace() {
         kind: run.decision.kind,
         actionId: run.decision.action_id,
         quantityLb: run.decision.quantity_lb,
-        reason: run.decision.reason,
+        reason: run.decision.reason ?? undefined,
       } : undefined;
       setState({ phase: run.state, decision, selection: state.selection });
     }).catch((reason: Error) => setError(reason.message));
@@ -91,12 +98,15 @@ export default function DecisionWorkspace() {
       {state.phase === "ANALYZING" && <StageTrace onDone={() => undefined} />}
       {state.phase === "READY_FOR_REVIEW" && (
         <Review letter={letter} state={state} commit={setState}
-          onDecision={commitDecision} knowledge={liveRun?.knowledge} />
+          onDecision={commitDecision} knowledge={liveRun?.knowledge}
+          brief={liveRun?.decision_brief ?? undefined} />
       )}
       {state.phase === "ABSTAINED" && <SafeStop status="ABSTAINED" letter={letter} />}
       {(state.phase === "APPROVED" || state.phase === "REJECTED" || state.phase === "DEFERRED") && state.decision && (
         <ResultWorkspace letter={letter} runId={runId} decision={state.decision}
           execution={liveRun?.execution ?? undefined} feedbackRecorded={Boolean(liveRun?.feedback)}
+          outcomeRecorded={Boolean(liveRun?.outcome_feedback)}
+          brief={liveRun?.decision_brief ?? undefined}
           onReset={() => setConfirmReset(true)} />
       )}
 
@@ -117,12 +127,13 @@ export default function DecisionWorkspace() {
 /* ---------------------------------------------------------------- Review --- */
 type DialogKind = null | "approve" | "reject" | "defer" | "edit";
 
-function Review({ letter, state, commit, onDecision, knowledge }: {
+function Review({ letter, state, commit, onDecision, knowledge, brief }: {
   letter: ScenarioLetter;
   state: RunState;
   commit: (s: RunState) => void;
   onDecision: (decision: Decision) => Promise<void>;
   knowledge?: LiveRun["knowledge"];
+  brief?: DecisionBrief;
 }) {
   const golden = getGolden(letter);
   const actions = getActionMap(golden.scenario_id);
@@ -166,16 +177,10 @@ function Review({ letter, state, commit, onDecision, knowledge }: {
   const base = golden.projections.baseline as Record<string, unknown>;
   const detail = base[risk.category_id] as { conservative: ConservativeWeek[]; expected: ExpectedWeek[] } | undefined;
 
-  if (!detail) {
-    return (
-      <div className="stack" style={{ maxWidth: 640 }}>
-        <h1 className="risk-title" style={{ marginTop: 0 }}>Engine-only scenario</h1>
-        <p className="lead">
-          This scenario is validated in the deterministic engine's golden tests. The decision
-          workspace UI in this MVP is wired for Scenario A (the hero) and Scenario E (abstention).
-        </p>
-      </div>
-    );
+  if (letter !== "A" || !detail) {
+    return brief ? (
+      <GeneralReview brief={brief} knowledge={knowledge} onDecision={onDecision} />
+    ) : null;
   }
 
   const after = golden.projections.recommended_action_after as Record<string, unknown>;
@@ -463,6 +468,171 @@ function Review({ letter, state, commit, onDecision, knowledge }: {
   );
 }
 
+function GeneralReview({
+  brief, knowledge, onDecision,
+}: {
+  brief: DecisionBrief;
+  knowledge?: LiveRun["knowledge"];
+  onDecision: (decision: Decision) => Promise<void>;
+}) {
+  const [dialog, setDialog] = useState<null | "approve" | "reject" | "defer">(null);
+  const recommendation = brief.recommendation;
+  if (!recommendation) return null;
+  const action = recommendation.action;
+  const risk = brief.primary_risk;
+  const category = risk?.category_id
+    ? (CATEGORY_LABEL as Record<string, string>)[risk.category_id] ?? humanize(risk.category_id)
+    : "Operations";
+  const facts = Object.entries(risk?.details ?? {})
+    .filter(([, value]) => ["string", "number"].includes(typeof value))
+    .slice(0, 4);
+
+  return (
+    <div className="workspace">
+      <div className="col">
+        <section>
+          <div style={{ display: "flex", gap: "var(--s3)", alignItems: "center", flexWrap: "wrap" }}>
+            <span className="pill pill--breach"><AlertTriangle size={ICON_SM} aria-hidden /> {humanize(risk?.risk_type ?? "decision risk")}</span>
+            <span className="hint"><Check size={ICON_SM} aria-hidden style={{ color: "var(--ok)", verticalAlign: "-2px" }} /> Verified recommendation ready</span>
+          </div>
+          <h1 className="risk-title">{brief.scenario_name}</h1>
+          <p className="lead">{brief.status_message}</p>
+          {facts.length > 0 && (
+            <div className="metrics">
+              {facts.map(([key, value]) => (
+                <Metric key={key} lab={humanize(key)} val={formatDecisionFact(key, value)} />
+              ))}
+            </div>
+          )}
+        </section>
+
+        {brief.rationale && (
+          <section className="card">
+            <h2 className="sec">Why this recommendation</h2>
+            <p className="lead" style={{ fontSize: 17 }}>{brief.rationale.why_now}</p>
+            <p>{brief.rationale.why_this_action}</p>
+            <p className="hint">{brief.rationale.uncertainty}</p>
+          </section>
+        )}
+
+        <section className="card">
+          <h2 className="sec">Recommended response</h2>
+          <div className="rec">
+            <div className="rec__top">
+              <div>
+                <div className="rec__name">{action.display_name}<span className="tag">Recommended</span></div>
+                <div className="rec__sub">Best feasible response under the verified scenario rules.</div>
+              </div>
+              <ConfidenceBadge level={recommendation.confidence_label} />
+            </div>
+            <div className="rec__figures">
+              <Fig lab="Quantity" val={lb(action.requested_quantity_lb)} />
+              <Fig lab="Simulated cost" val={usd(action.cost_usd)} />
+              <Fig lab="Category" val={category} />
+              <Fig lab="Score" val={action.score ? Number(action.score).toFixed(1) : "—"} />
+            </div>
+            <div className="constraints" style={{ marginTop: "var(--s4)" }}>
+              <span className="chip chip--pass"><Check size={ICON_SM} aria-hidden /> Feasible</span>
+              <span className="chip chip--pass"><Check size={ICON_SM} aria-hidden /> Human approval required</span>
+              <span className="chip chip--pass"><Check size={ICON_SM} aria-hidden /> Simulation only</span>
+            </div>
+            <div className="actions">
+              <button className="btn btn--primary" onClick={() => setDialog("approve")}><ShieldCheck size={ICON} aria-hidden /> Approve simulated action</button>
+              <button className="btn btn--ghost" onClick={() => setDialog("reject")}>Reject</button>
+              <button className="btn btn--ghost" onClick={() => setDialog("defer")}>Defer</button>
+            </div>
+          </div>
+        </section>
+
+        {brief.alternatives.length > 0 && (
+          <section className="card">
+            <h2 className="sec">Other feasible actions considered</h2>
+            <table className="table">
+              <thead><tr><th>Action</th><th className="num">Quantity</th><th className="num">Cost</th><th className="num">Rank</th></tr></thead>
+              <tbody>
+                {brief.alternatives.map((alternative) => (
+                  <tr key={alternative.evaluated_action_id}>
+                    <td>{alternative.display_name}</td>
+                    <td className="num">{lb(alternative.requested_quantity_lb)}</td>
+                    <td className="num">{usd(alternative.cost_usd)}</td>
+                    <td className="num">{alternative.rank ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        )}
+
+        {brief.rejected_options.length > 0 && (
+          <section className="card">
+            <h2 className="sec">Not feasible in this scenario</h2>
+            <ul className="rejected">
+              {brief.rejected_options.map((option) => (
+                <li key={option.evaluated_action_id}>
+                  <span style={{ fontWeight: 700 }}><X size={ICON_SM} className="x-icon" aria-hidden /> {option.display_name}</span>
+                  <span className="why">{option.failed_constraints.map(humanize).join(", ")}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+      </div>
+
+      <aside className="col">
+        {knowledge && (
+          <section className="card source-card">
+            <h2 className="sec">Knowledge used</h2>
+            <p className="hint">Frozen connector snapshots for this run.</p>
+            {[...knowledge.current, ...knowledge.organizational].map((source) => (
+              <div className="evrow" key={source.source_id}>
+                <span>{source.display_name}<div className="ev-id mono">{source.source_id}</div></span>
+                <span className="source-ok"><Check size={12} aria-hidden /> pinned</span>
+              </div>
+            ))}
+          </section>
+        )}
+        <section className="card">
+          <h2 className="sec">Evidence</h2>
+          {brief.evidence.map((item) => (
+            <div className="evidence-brief" key={item.evidence_id}>
+              <strong>{item.title}</strong>
+              <p>{item.summary}</p>
+              <span className="ev-id mono">{item.evidence_id} · {humanize(item.trust_level)}</span>
+            </div>
+          ))}
+        </section>
+      </aside>
+
+      {dialog === "approve" && (
+        <Dialog title="Apply this action to the simulation?" primaryLabel="Approve simulated action"
+          onClose={() => setDialog(null)} onPrimary={() => {
+            setDialog(null);
+            void onDecision({ kind: "approve", actionId: action.action_id, quantityLb: action.requested_quantity_lb });
+          }}>
+          <p>This records an approved action intent and completes it only in the synthetic gateway. No external system is changed.</p>
+          <dl className="kv">
+            <div><dt>Action</dt><dd>{action.display_name}</dd></div>
+            <div><dt>Quantity</dt><dd>{lb(action.requested_quantity_lb)}</dd></div>
+            <div><dt>Simulated cost</dt><dd>{usd(action.cost_usd)}</dd></div>
+          </dl>
+        </Dialog>
+      )}
+      {dialog === "reject" && (
+        <RejectDialog onClose={() => setDialog(null)} onConfirm={(reason) => {
+          setDialog(null);
+          void onDecision({ kind: "reject", actionId: action.action_id, quantityLb: action.requested_quantity_lb, reason });
+        }} />
+      )}
+      {dialog === "defer" && (
+        <DeferDialog onClose={() => setDialog(null)} onConfirm={(reason) => {
+          setDialog(null);
+          void onDecision({ kind: "defer", actionId: action.action_id, quantityLb: action.requested_quantity_lb, reason });
+        }} />
+      )}
+    </div>
+  );
+}
+
 /* --------------------------------------------------------- dialog bodies --- */
 function RejectDialog({ onClose, onConfirm }: { onClose: () => void; onConfirm: (r: string) => void }) {
   const [reason, setReason] = useState("");
@@ -553,6 +723,16 @@ function reasonText(codes: string[]): string {
   if (codes.includes("ARRIVES_BY_BREACH")) return "Arrives after the breach week";
   if (codes.includes("BUDGET") || codes.includes("STORAGE_CAPACITY")) return "Over budget or storage capacity";
   return "Fails a hard constraint";
+}
+function humanize(value: string): string {
+  return value.toLowerCase().split("_").map(titleCase).join(" ");
+}
+function formatDecisionFact(key: string, value: unknown): string {
+  if (key.endsWith("_lb")) return lb(String(value));
+  if (key.endsWith("_usd")) return usd(String(value));
+  if (key.includes("date") || key.includes("week_start")) return date(String(value));
+  if (key.includes("rate") && Number(value) <= 1) return `${Math.round(Number(value) * 100)}%`;
+  return String(value);
 }
 function evidenceLabel(id: string): string {
   if (id.startsWith("FLOW")) return "Recent distribution history";

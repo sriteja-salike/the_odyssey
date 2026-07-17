@@ -4,17 +4,20 @@
 # from the repo root and pass no unquoted absolute paths.
 PYTHON ?= python3
 
-.PHONY: help doctor guard test-contracts test-golden test-agent test-integration test agent-smoke demo demo-down demo-logs
+.PHONY: help doctor guard lint typecheck test-contracts test-golden test-agent test-integration test verify agent-smoke demo demo-down demo-logs
 
 help:
 	@echo "Live backend targets:"
 	@echo "  make doctor          tool + fixture readiness, no state change"
 	@echo "  make guard           fail if the engine leaks binary floats (04 §4.0)"
+	@echo "  make lint            check source and test quality"
+	@echo "  make typecheck       verify backend type contracts"
 	@echo "  make test-contracts  schema-validate all goldens/fixtures/overlays (18)"
 	@echo "  make test-golden     recompute Scenario A anchors vs golden (Decimal)"
 	@echo "  make test-agent      provider-neutral agent and safety tests (no network/key)"
 	@echo "  make test-integration PostgreSQL lifecycle, parity, and idempotency tests"
 	@echo "  make test            guard + contracts + golden + agent tests"
+	@echo "  make verify          run all backend quality and PostgreSQL/API checks"
 	@echo "  make agent-smoke     one real Anthropic call through the running API"
 	@echo "  make demo            start PostgreSQL, API, and UI with synthetic data"
 	@echo "  make demo-down       stop Docker services and retain demo data"
@@ -40,11 +43,17 @@ doctor:
 guard:
 	@$(PYTHON) scripts/check_no_float.py
 
+lint:
+	@uv run ruff check src tests
+
+typecheck:
+	@uv run mypy src/nourishops
+
 test-contracts:
-	@$(PYTHON) -m pytest tests/contracts -q
+	@uv run pytest tests/contracts -q
 
 test-golden:
-	@$(PYTHON) -m pytest tests/golden -q
+	@uv run pytest tests/golden -q
 
 test-agent:
 	@uv run pytest tests/agents -q
@@ -55,4 +64,6 @@ test-integration:
 agent-smoke:
 	@uv run python scripts/smoke_agent.py
 
-test: guard test-contracts test-golden test-agent
+test: guard lint typecheck test-contracts test-golden test-agent
+
+verify: test test-integration

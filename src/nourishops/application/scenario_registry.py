@@ -53,6 +53,10 @@ class ScenarioPackageDefinition(BaseModel):
     problem_type: str = Field(pattern=r"^[A-Z][A-Z0-9_]*$")
     solver_id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]*$")
     normalizer_id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]*$")
+    context_builder_id: str = Field(
+        default="nourishops-decision-context-v1",
+        pattern=r"^[a-z0-9][a-z0-9-]*$",
+    )
     result_contract: str = Field(min_length=1)
     source_inputs: list[ScenarioInputDefinition] = Field(min_length=1)
     overlay: ScenarioOverlayDefinition

@@ -1,11 +1,11 @@
 /* Persistent application frame (01 §6.1, 02 §4): wordmark, nav, scenario/run
    context, mode indicator, clean-run control, and the persistent simulation
    notice — present on every route. */
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { AlertTriangle, MessageSquare, ICON_SM } from "./icons";
 import { SCENARIOS, getOverlay, type ScenarioLetter } from "../lib/api";
-import { createRun } from "../lib/liveApi";
+import { createRun, getConnectionMode, subscribeConnectivity } from "../lib/liveApi";
 import { date } from "../lib/format";
 import Assistant from "./Assistant";
 
@@ -25,6 +25,8 @@ export default function AppFrame({ runId, letter, active, onStartClean, children
   const navigate = useNavigate();
   const overlay = getOverlay(letter);
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const connectionMode = useSyncExternalStore(subscribeConnectivity, getConnectionMode, getConnectionMode);
+  const offline = connectionMode === "OFFLINE_DEMO";
 
   async function defaultStartClean() {
     const run = await createRun(letter, runId);
@@ -49,17 +51,24 @@ export default function AppFrame({ runId, letter, active, onStartClean, children
           <NavLink to={`/runs/${runId}`} end aria-current={active === "decision" ? "page" : undefined}>
             Decision
           </NavLink>
-          <NavLink to={`/runs/${runId}/compare`} aria-current={active === "compare" ? "page" : undefined}>
-            Compare
-          </NavLink>
+          {letter === "A" && (
+            <NavLink to={`/runs/${runId}/compare`} aria-current={active === "compare" ? "page" : undefined}>
+              Compare
+            </NavLink>
+          )}
           <NavLink to={`/runs/${runId}/audit`} aria-current={active === "audit" ? "page" : undefined}>
             Audit
           </NavLink>
         </nav>
         <div className="appbar__right">
-          <span className="mode" title="Numbers are computed offline by the deterministic engine.">
+          <span
+            className={`mode ${offline ? "mode--offline" : ""}`}
+            title={offline
+              ? "The backend is unreachable. Complete frozen scenario outputs are being used for this demo."
+              : "Math and ranking are computed by the deterministic engine; AI roles are read-only."}
+          >
             <span className="dot" />
-            Offline verified mode
+            {offline ? "Offline demo · frozen results" : "Live verified · deterministic authority"}
           </span>
           <button className="btn btn--secondary btn--sm" onClick={onStartClean ?? defaultStartClean}>
             Start clean run
@@ -69,7 +78,7 @@ export default function AppFrame({ runId, letter, active, onStartClean, children
             onClick={() => setAssistantOpen((v) => !v)}
             aria-pressed={assistantOpen}
           >
-            <MessageSquare size={ICON_SM} aria-hidden /> Assistant
+            <MessageSquare size={ICON_SM} aria-hidden /> Decision guide
           </button>
         </div>
       </header>

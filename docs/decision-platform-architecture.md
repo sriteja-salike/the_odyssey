@@ -7,16 +7,20 @@ through versioned scenario packages and registered deterministic solvers.
 ```mermaid
 flowchart LR
   Sources["Synthetic production-shaped sources"] --> Freeze["Immutable run input manifest"]
-  Freeze --> Context["Incident + current knowledge + organizational knowledge"]
+  Freeze --> Context["Versioned shared context bundle"]
   Context --> Problem["Versioned scenario package and problem type"]
   Problem --> Solver["Deterministic solver registry"]
   Solver --> Verified["Verified recommendation package"]
-  Verified --> Agent["Read-only AI explanation"]
-  Agent --> Brief["Typed decision brief API"]
-  Verified --> Brief
-  Brief --> UI["Frontend review and feedback"]
-  UI --> Approval["Human decision boundary"]
-  Approval --> Audit["Append-only simulated outcome"]
+  Verified --> Agent["Read-only decision orchestrator"]
+  Agent --> Review["Isolated independent reviewer"]
+  Review --> Guard["Backend authority validator"]
+  Guard --> Brief["Typed brief + transparent stage trace"]
+  Brief --> Approval["Human approval boundary"]
+  Approval --> Intent["Immutable action intent"]
+  Intent --> Gateway["Simulated execution adapter"]
+  Gateway --> Receipt["Completed action receipt"]
+  Receipt --> Feedback["Recommendation + outcome feedback"]
+  Feedback --> Audit["Append-only audit history"]
 ```
 
 ## Authority boundaries
@@ -24,22 +28,32 @@ flowchart LR
 | Layer | Owns | Cannot do |
 |---|---|---|
 | Source adapters | Retrieve versioned current and organizational records | Rank or approve actions |
-| Scenario package | Declare required documents, schemas, normalizer, problem type, solver, and result contract | Change a frozen run |
+| Scenario package | Declare required documents, schemas, context builder, normalizer, problem type, solver, and result contract | Change a frozen run |
 | Deterministic solver | Math, projections, constraints, feasibility, ranking, abstention, and output hashes | Call an AI provider or external system |
-| AI adapter | Retrieve one immutable recommendation package and explain it in typed prose | Calculate, rank, invent facts/IDs/numbers, approve, or execute |
+| Decision orchestrator | Retrieve one immutable recommendation package and explain it in typed prose | Calculate, rank, invent facts/IDs/numbers, approve, or execute |
+| Independent reviewer | Recheck the grounded draft against a closed five-check verdict | Change deterministic results, write, or execute |
+| Authority validator | Enforce IDs, evidence, grounded language, approval, and simulation boundaries | Optimize or substitute an AI decision |
 | API | Validate commands, enforce idempotency and revision checks, return typed data | Trust frontend calculations |
 | Manager UI | Display verified results and collect an explicit human decision/feedback | Directly mutate audit records or provider prompts |
-| Simulated gateway | Demonstrate the shape of a future operational handoff | Perform an external write |
+| Simulated gateway | Convert an approved, hashed action intent into a typed completion receipt | Perform an external write or accept model-authored payloads |
 
-The AI is not the calculator. It is a bounded explanation adapter around a verified
-decision result. If a provider times out, returns invalid structure, cites an unknown
+The AI is not the calculator. Two bounded roles sit around a verified decision result:
+the orchestrator creates the user-facing explanation, and an isolated reviewer checks
+that draft. If either provider call times out, returns invalid structure, cites an unknown
 identifier, introduces a number, or claims execution, its wording is discarded and the
-same deterministic recommendation is rendered by the offline adapter.
+same deterministic recommendation is rendered by the offline adapter. Primary
+explanation sentences are backend-authored grounded statements; a live provider may
+copy or select them but cannot introduce new prose as fact.
+
+The append-only `decision-trace/1.0.0` record exposes stage, actor, status, duration,
+input/output hashes, provider/fallback mode, tool names, and a short verified summary.
+It explicitly does not expose private chain-of-thought.
 
 ## Provider architecture
 
-`PydanticAIDecisionAgent` supplies one closed output schema and one read-only tool.
-`build_decision_agent` explicitly binds either an Anthropic or OpenAI provider client;
+The orchestrator and reviewer each supply a different closed output schema and a
+different read-only tool. `build_decision_agent` and `build_decision_reviewer`
+explicitly bind either an Anthropic or OpenAI provider client;
 the model string cannot switch providers. Provider SDK retries are disabled. The
 adapter owns one shared retry/repair budget inside one global deadline, then uses the
 offline fallback.
@@ -73,18 +87,25 @@ or frontend contract changes.
 - current/organizational source roles;
 - the overlay path and schema;
 - a normalizer ID;
+- a shared-context builder ID;
 - an explicit `problem_type` and `solver_id`;
 - the frontend result contract.
 
 The current `frozen-a-e` package uses `SINGLE_ACTION_CATALOG`,
-`catalog-enumeration`, and `decision-brief/1.0.0`. The existing build contract schemas
+`nourishops-decision-context-v1`, `catalog-enumeration`, and
+`decision-brief/1.0.0`. Context builders are selected through a small registry, so a
+new problem family can reuse the current context contract or register a specialized
+builder without branching the service. The existing build contract schemas
 remain unchanged. A materially new scenario contract receives a new package/schema
 version rather than weakening the A–E oracle.
 
 At run creation, PostgreSQL copies every declared document into
 `run_input_documents`, stores source versions and SHA-256 hashes, includes the package
-definition in `contract_snapshot_hash`, and seals the input set after
-`SCENARIO_VALIDATED`. Connector refreshes affect only later runs.
+definition and closed JSON Schema set in `contract_snapshot_hash`, and stores the same
+contract in immutable `run_contract_snapshots`. Replay uses that pinned contract rather
+than the live registry. The input set is sealed after `SCENARIO_VALIDATED`, and
+connector refreshes affect only later runs. Snapshot lookup also requires the
+package-declared source ID, preventing cross-source document substitution.
 
 ## Solver seam and complex mathematics
 
@@ -114,9 +135,16 @@ shape.
 
 ## API and reliability contract
 
-- `GET /api/v1/capabilities` exposes providers, solver capabilities, problem types,
-  limitations, and disabled post-recommendation workflows.
+- `GET /api/v1/capabilities` exposes context builders, both agent roles, solver
+  capabilities, problem types, execution mode, and workflow versions.
+- `GET /api/v1/runs/{run_id}/context-bundle` returns the frozen shared context and
+  provenance hash.
 - `GET /api/v1/runs/{run_id}/decision-brief` returns the stable Pydantic frontend model.
+- `GET /api/v1/runs/{run_id}/decision-trace` returns the five transparent decision stages.
+- Approval atomically stores one immutable action intent and one simulated completion
+  receipt. It never accepts an AI-authored write payload.
+- `POST /api/v1/runs/{run_id}/outcome-feedback` records successful, partial, failed,
+  or unknown observed outcomes.
 - Every mutating POST requires `Idempotency-Key`.
 - The response and its mutations commit in one PostgreSQL transaction.
 - Same key/body replays the original response; same key/different body returns
@@ -125,14 +153,15 @@ shape.
   decision and, at most, one simulated execution.
 - Decision commands include `expected_revision` and `recommendation_id`; stale review
   screens return `409 STALE_RECOMMENDATION`.
-- Audit, input, and idempotency records are insert-only.
+- Audit, input, contract, action intent, execution receipt, feedback, and idempotency
+  records are insert-only.
 
 ## Adding a scenario variation
 
 1. Decide whether the problem fits an existing package/problem type or needs a new
    versioned contract.
-2. Declare all input documents, source roles, schemas, normalizer, solver, and result
-   contract in a scenario package.
+2. Declare all input documents, source roles, schemas, context builder, normalizer,
+   solver, and result contract in a scenario package.
 3. Add synthetic source snapshots and an overlay; validate all foreign-key references.
 4. Register or reuse a deterministic solver and state its limitations honestly.
 5. Create a golden result plus independent anchor/property tests.
@@ -140,6 +169,6 @@ shape.
    parity, abstention, concurrency, idempotency, and typed decision-brief validation.
 7. Only then design the user workflow against the decision brief.
 
-Post-recommendation email, donor, peer, ERP, and outreach workflows remain deliberately
-disabled. Their eventual adapters require a separate authorization, preview, approval,
-idempotency, and audit design.
+The demo completes actions only through `simulated-operations-v1`. Real email, donor,
+peer, ERP, and outreach adapters remain disabled until each has an explicit credential,
+authorization, preview, idempotency, receipt, and failure-recovery contract.

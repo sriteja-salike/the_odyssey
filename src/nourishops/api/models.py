@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from nourishops.application.decision_package import DecisionBrief
 
@@ -37,6 +38,22 @@ class FeedbackRequest(BaseModel):
     rating: Literal["HELPFUL", "NOT_HELPFUL"]
     reason: str | None = Field(default=None, max_length=500)
     survey: dict[str, Any] = Field(default_factory=dict)
+
+
+class OutcomeFeedbackRequest(BaseModel):
+    outcome: Literal["SUCCESSFUL", "PARTIAL", "FAILED", "UNKNOWN"]
+    actual_quantity_lb: int | None = Field(default=None, ge=0)
+    actual_cost_usd: Decimal | None = Field(default=None, ge=0)
+    reason: str | None = Field(default=None, max_length=500)
+    survey: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def require_failure_reason(self) -> OutcomeFeedbackRequest:
+        if self.outcome in {"PARTIAL", "FAILED"} and not (
+            self.reason and self.reason.strip()
+        ):
+            raise ValueError("A reason is required for a partial or failed outcome")
+        return self
 
 
 class ResponseMeta(BaseModel):

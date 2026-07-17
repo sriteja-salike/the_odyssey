@@ -4,7 +4,9 @@ from __future__ import annotations
 import json
 from copy import deepcopy
 from decimal import Decimal
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
+
+ContextBuilder = Callable[[Mapping[str, str], str], dict[str, Any]]
 
 
 def _documents(raw_documents: Mapping[str, str], scenario_key: str) -> dict[str, dict]:
@@ -206,3 +208,27 @@ def build_scenario_context(raw_documents: Mapping[str, str], scenario_key: str) 
             "external_writes_allowed": False,
         },
     }
+
+
+class ContextBuilderRegistry:
+    """Small explicit extension seam selected by each scenario package."""
+
+    def __init__(self, builders: Mapping[str, ContextBuilder] | None = None):
+        self._builders = dict(builders or {
+            "nourishops-decision-context-v1": build_scenario_context,
+        })
+
+    def build(
+        self,
+        builder_id: str,
+        documents: Mapping[str, str],
+        scenario_key: str,
+    ) -> dict[str, Any]:
+        try:
+            builder = self._builders[builder_id]
+        except KeyError as exc:
+            raise RuntimeError(f"Unsupported context builder: {builder_id}") from exc
+        return builder(documents, scenario_key)
+
+    def describe(self) -> list[str]:
+        return sorted(self._builders)

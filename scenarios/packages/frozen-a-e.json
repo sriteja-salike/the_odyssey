@@ -12,6 +12,7 @@
   "problem_type": "SINGLE_ACTION_CATALOG",
   "solver_id": "catalog-enumeration",
   "normalizer_id": "nourishops-snapshot-v1",
+  "context_builder_id": "nourishops-decision-context-v1",
   "result_contract": "decision-brief/1.0.0",
   "source_inputs": [
     {

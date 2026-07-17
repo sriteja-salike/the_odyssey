@@ -8,6 +8,8 @@ from nourishops.agents.contracts import (
     AgentMetadata,
     AgentOutcome,
     WhyNotExplanation,
+    grounded_primary_narrative,
+    grounded_why_not_narrative,
 )
 
 
@@ -25,40 +27,27 @@ class OfflineDecisionAgent:
     def explain(self, package: dict[str, Any]) -> AgentOutcome:
         recommendation = package["recommendation"]
         selected = package["selected_action"]
-        risk = package["primary_risk"]
+        grounded = grounded_primary_narrative(package)
+        grounded_why_not = grounded_why_not_narrative(package)
 
         why_not: list[WhyNotExplanation] = []
         for option in package["alternatives"][:2]:
             why_not.append(WhyNotExplanation(
                 evaluated_action_id=option["evaluated_action_id"],
-                explanation=(
-                    "This option is feasible but ranks below the selected catalog action "
-                    "under the verified scoring rules."
-                ),
+                explanation=grounded_why_not[option["evaluated_action_id"]],
             ))
         for option in package["rejected_options"][:2]:
-            failures = ", ".join(option["failed_constraints"]) or "a hard constraint"
             why_not.append(WhyNotExplanation(
                 evaluated_action_id=option["evaluated_action_id"],
-                explanation=f"This option is not feasible because it fails {failures}.",
+                explanation=grounded_why_not[option["evaluated_action_id"]],
             ))
 
-        confidence = recommendation["confidence"]
         explanation = AgentExplanation(
             recommendation_id=recommendation["recommendation_id"],
             headline=selected["display_name"],
-            why_now=(
-                f"{risk['risk_type'].replace('_', ' ').title()} is the highest-priority "
-                "verified risk in this scenario."
-            ),
-            why_this_action=(
-                "The selected plan is the highest-ranked feasible catalog action under the "
-                "verified rules."
-            ),
-            uncertainty=(
-                f"Confidence is {confidence['label']}. The result is simulated and still "
-                "requires manager approval."
-            ),
+            why_now=grounded["why_now"],
+            why_this_action=grounded["why_this_action"],
+            uncertainty=grounded["uncertainty"],
             why_not=why_not,
             evidence_ids=selected["evidence_ids"] or [
                 item["evidence_id"] for item in package["evidence"][:1]

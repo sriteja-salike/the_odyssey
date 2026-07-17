@@ -11,7 +11,12 @@ import { letterFromRunId } from "../lib/run";
 import { CATEGORY_LABEL } from "../lib/categories";
 import { lb, usd, weeks, wos, date, titleCase } from "../lib/format";
 import type { AuditEvent } from "../types/golden";
-import { getEvents, type LiveEvent } from "../lib/liveApi";
+import {
+  getEvents,
+  type DecisionTrace,
+  type DecisionTraceStage,
+  type LiveEvent,
+} from "../lib/liveApi";
 
 const EVENT_LABEL: Record<string, string> = {
   RUN_CREATED: "Run created",
@@ -19,10 +24,15 @@ const EVENT_LABEL: Record<string, string> = {
   NOTICE_EXTRACTED: "Notice extracted",
   DISRUPTION_APPLIED: "Disruption applied",
   RISK_DETECTED: "Risk detected",
+  DECISION_TRACE_RECORDED: "Decision process recorded",
+  FALLBACK_USED: "Orchestrator fallback used",
+  REVIEWER_FALLBACK_USED: "Reviewer fallback used",
   RECOMMENDATION_PREPARED: "Recommendation prepared",
   MANAGER_APPROVED: "Manager approved",
   SIMULATED_ACTION_APPLIED: "Simulated action applied",
+  SIMULATED_ACTION_COMPLETED: "Simulated action completed",
   RECOMMENDATION_FEEDBACK: "Recommendation feedback recorded",
+  OUTCOME_FEEDBACK_RECORDED: "Action outcome recorded",
 };
 
 export default function Audit() {
@@ -43,6 +53,9 @@ export default function Audit() {
     event_type: event.event_type,
     semantic_id: event.event_id,
   }));
+  const trace = liveEvents?.find(
+    (event) => event.event_type === "DECISION_TRACE_RECORDED",
+  )?.payload.decision_trace as DecisionTrace | undefined;
   const v = golden as unknown as Record<string, string>;
 
   return (
@@ -63,6 +76,37 @@ export default function Audit() {
             <span>Clock <b>{v.fixed_clock_utc}</b></span>
           </div>
         </section>
+
+        {trace && (
+          <section className="card">
+            <div className="process-head">
+              <div>
+                <h2 className="sec">How this recommendation was produced</h2>
+                <p className="hint">Verified stage records and timings—not private chain-of-thought.</p>
+              </div>
+              <span className="pill pill--ok">{trace.final_status}</span>
+            </div>
+            <ol className="decision-process">
+              {trace.stages.map((stage, index) => (
+                <li key={stage.stage}>
+                  <span className="decision-process__number">{index + 1}</span>
+                  <div>
+                    <div className="decision-process__title">
+                      <strong>{humanize(stage.stage)}</strong>
+                      <span>{humanize(stage.actor)}</span>
+                    </div>
+                    <p>{stage.summary}</p>
+                    <div className="decision-process__meta">
+                      <span>{stage.status === "FALLBACK" ? "Safe fallback" : titleCase(stage.status)}</span>
+                      <span>{stage.duration_ms} ms</span>
+                      {stageRuntime(stage) && <span>{stageRuntime(stage)}</span>}
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
 
         <section className="card">
           <h2 className="sec">Events</h2>
@@ -125,6 +169,23 @@ export default function Audit() {
   );
 }
 
+function humanize(value: string): string {
+  return value.toLowerCase().split("_").map(titleCase).join(" ");
+}
+
+function stageRuntime(stage: DecisionTraceStage): string | null {
+  const mode = stage.details.effective_mode;
+  const provider = stage.details.provider;
+  const model = stage.details.model;
+  const solver = stage.details.solver_id;
+  if (typeof mode === "string") {
+    return [humanize(mode), provider, model]
+      .filter((value): value is string => typeof value === "string" && value.length > 0)
+      .join(" · ");
+  }
+  return typeof solver === "string" ? solver : null;
+}
+
 /** Per-event inputs/outputs derived from the golden. */
 function eventDetail(e: AuditEvent, letter: Parameters<typeof getGolden>[0]): [string, string][] {
   const golden = getGolden(letter);
@@ -173,6 +234,7 @@ function eventDetail(e: AuditEvent, letter: Parameters<typeof getGolden>[0]): [s
     case "MANAGER_APPROVED":
       return [["Approved evaluation", e.semantic_id], ["Authority", "Human manager (required)"]];
     case "SIMULATED_ACTION_APPLIED":
+    case "SIMULATED_ACTION_COMPLETED":
       return [["Applied action", e.semantic_id], ["Effect", "Projection recomputed in simulation only"]];
     default:
       return [["Reference", e.semantic_id]];

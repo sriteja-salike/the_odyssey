@@ -93,12 +93,17 @@ def _shortage_for(snap: Snapshot, cat: str, forecast_c: Decimal,
                   cons_rows: list[WeekRow]) -> Risk | None:
     policy = snap.policies[cat]
     min_wos, target_wos = policy.min_wos, policy.target_wos
-    breach_t = next((t for t in range(HORIZON)
-                     if cons_rows[t].end_wos is not None and cons_rows[t].end_wos < min_wos), None)
+    breach_t = None
+    for t in range(HORIZON):
+        end_wos = cons_rows[t].end_wos
+        if end_wos is not None and end_wos < min_wos:
+            breach_t = t
+            break
     if breach_t is None:
         return None
     row = cons_rows[breach_t]
     wos = row.end_wos
+    assert wos is not None
     target_end = target_wos * forecast_c
     gap = max(ZERO, target_end - row.ending_lb + row.unmet_lb)
     depth = clamp01(div(min_wos - wos, max(min_wos, CENT)))
@@ -233,6 +238,8 @@ def _cheapest_qualifying_purchase(snap: Snapshot, forecast: dict[str, Decimal],
             continue
         if a.computed_cost > budget:  # individually affordable (04 §5.5)
             continue
+        assert a.category_id is not None
+        assert a.arrival_week_start is not None
         lot = ExtraLot(a.category_id, a.arrival_week_start, a.requested_lb, "CONFIRMED",
                        ONE, a.storage, a.yield_ratio, a.usable_life_days)
         peaks = capacity_peaks(snap, forecast, [lot])

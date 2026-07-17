@@ -10,9 +10,9 @@ from __future__ import annotations
 import json
 from decimal import Decimal
 from pathlib import Path
-from typing import Mapping
+from typing import Any, Mapping
 
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
 from referencing import Registry, Resource
 
 from nourishops.domain.model import (Action, CATEGORY_ORDER, Inbound, Offer, Policy,
@@ -41,23 +41,69 @@ def _load_json(path: Path) -> dict:
     return json.loads(path.read_text(), parse_float=Decimal)
 
 
-def _registry() -> Registry:
+def _registry(schema_documents: Mapping[str, dict[str, Any]] | None = None) -> Registry:
     res = []
-    for sp in SCHEMAS.glob("*.json"):
-        doc = json.loads(sp.read_text())
-        res.append((sp.name, Resource.from_contents(doc)))
+    documents = schema_documents or {
+        sp.name: json.loads(sp.read_text()) for sp in SCHEMAS.glob("*.json")
+    }
+    for name, doc in documents.items():
+        res.append((name, Resource.from_contents(doc)))
         if "$id" in doc:
             res.append((doc["$id"], Resource.from_contents(doc)))
     return Registry().with_resources(res)
 
 
-def _validate(instance: dict, schema_name: str, registry: Registry) -> None:
-    schema = json.loads((SCHEMAS / schema_name).read_text())
+def _validate(
+    instance: dict,
+    schema_name: str,
+    registry: Registry,
+    schema_documents: Mapping[str, dict[str, Any]] | None = None,
+) -> None:
+    schema = (
+        schema_documents[schema_name]
+        if schema_documents is not None
+        else json.loads((SCHEMAS / schema_name).read_text())
+    )
     errors = sorted(Draft202012Validator(schema, registry=registry).iter_errors(instance),
                     key=lambda e: list(e.path))
     if errors:
         loc = "/".join(str(p) for p in errors[0].path) or "<root>"
         raise ValueError(f"{schema_name} @{loc}: {errors[0].message}")
+
+
+def snapshot_schema_documents(schema_names: set[str]) -> dict[str, dict[str, Any]]:
+    """Load a closed local schema set so a run can replay without live schema files."""
+    pending = list(schema_names)
+    documents: dict[str, dict[str, Any]] = {}
+
+    def references(value: Any) -> set[str]:
+        if isinstance(value, dict):
+            dict_found = {
+                str(item).split("#", 1)[0]
+                for key, item in value.items()
+                if key == "$ref" and isinstance(item, str) and not item.startswith("#")
+            }
+            for item in value.values():
+                dict_found.update(references(item))
+            return {Path(item).name for item in dict_found if item}
+        if isinstance(value, list):
+            list_found: set[str] = set()
+            for item in value:
+                list_found.update(references(item))
+            return list_found
+        return set()
+
+    while pending:
+        name = pending.pop()
+        if name in documents:
+            continue
+        path = SCHEMAS / name
+        if not path.is_file():
+            raise FileNotFoundError(f"Scenario schema is unavailable: {name}")
+        document = json.loads(path.read_text())
+        documents[name] = document
+        pending.extend(references(document) - documents.keys())
+    return documents
 
 
 def _D(x) -> Decimal:
@@ -67,6 +113,8 @@ def _D(x) -> Decimal:
 def load_scenario_from_documents(
     documents: Mapping[str, str], scenario_id: str, validate: bool = True,
     overlay_schema_name: str = "scenario_overlay.schema.json",
+    source_schema_map: Mapping[str, str] | None = None,
+    schema_documents: Mapping[str, dict[str, Any]] | None = None,
 ) -> Snapshot:
     """Build a Snapshot from source-system JSON documents.
 
@@ -81,10 +129,16 @@ def load_scenario_from_documents(
     overlay_name = f"scenarios/{scenario_id}.json"
     overlay_doc = json.loads(documents[overlay_name], parse_float=Decimal)
     if validate:
-        registry = _registry()
-        for name, schema in {**_SCHEMA_OF, **_SUPPORTING_DOCS}.items():
-            _validate(json.loads(documents[name]), schema, registry)
-        _validate(json.loads(documents[overlay_name]), overlay_schema_name, registry)
+        registry = _registry(schema_documents)
+        declared_schemas = source_schema_map or {**_SCHEMA_OF, **_SUPPORTING_DOCS}
+        for name, schema in declared_schemas.items():
+            _validate(
+                json.loads(documents[name]), schema, registry, schema_documents,
+            )
+        _validate(
+            json.loads(documents[overlay_name]), overlay_schema_name,
+            registry, schema_documents,
+        )
 
     def require_references(field: str, document: str, identifier: str) -> set[str]:
         selected = set(overlay_doc.get(field, []))

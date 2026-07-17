@@ -137,7 +137,7 @@ def test_concurrent_decisions_commit_exactly_once() -> None:
     assert sorted(outcomes) == ["COMMITTED", "DECISION_ALREADY_FINAL"]
     event_types = [item["event_type"] for item in store.get_events(run["run_id"])]
     assert event_types.count("MANAGER_APPROVED") == 1
-    assert event_types.count("SIMULATED_ACTION_APPLIED") == 1
+    assert event_types.count("SIMULATED_ACTION_COMPLETED") == 1
     assert [item["sequence_no"] for item in store.get_events(run["run_id"])] == list(
         range(1, len(event_types) + 1)
     )

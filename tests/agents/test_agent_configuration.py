@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pytest
 
-from nourishops.agents.runtime import build_decision_agent
+from nourishops.agents.runtime import build_decision_agent, build_decision_reviewer
 from nourishops.settings import Settings, get_settings
 
 
@@ -51,6 +51,16 @@ def test_missing_live_key_fails_closed() -> None:
     description = agent.describe()
     assert description.effective_mode == "offline_fallback"
     assert description.fallback_code == "AGENT_CONFIG_MISSING_FALLBACK"
+
+
+def test_reviewer_uses_the_same_provider_boundary_and_fails_closed() -> None:
+    configured = build_decision_reviewer(base_settings())
+    assert configured.describe().role == "INDEPENDENT_REVIEWER"
+    assert configured.describe().status == "live_configured"
+
+    fallback = build_decision_reviewer(base_settings(agent_api_key=None))
+    assert fallback.describe().effective_mode == "offline_fallback"
+    assert fallback.describe().fallback_code == "REVIEWER_CONFIG_MISSING_FALLBACK"
 
 
 def test_settings_are_read_at_call_time(monkeypatch: pytest.MonkeyPatch) -> None:

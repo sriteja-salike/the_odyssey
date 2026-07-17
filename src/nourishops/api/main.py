@@ -17,15 +17,20 @@ from nourishops.api.models import (
     DecisionBriefEnvelope,
     DecisionRequest,
     FeedbackRequest,
+    OutcomeFeedbackRequest,
 )
-from nourishops.agents import build_decision_agent
+from nourishops.agents import build_decision_agent, build_decision_reviewer
 from nourishops.application.service import ApplicationError, NourishOpsService
 from nourishops.persistence.postgres import IdempotencyKeyReused, PostgresStore
 from nourishops.settings import get_settings
 
 settings = get_settings()
 store = PostgresStore(settings.database_url)
-service = NourishOpsService(store, agent=build_decision_agent(settings))
+service = NourishOpsService(
+    store,
+    agent=build_decision_agent(settings),
+    reviewer=build_decision_reviewer(settings),
+)
 IdempotencyKey = Annotated[
     str,
     Header(alias="Idempotency-Key", min_length=8, max_length=128),
@@ -159,6 +164,11 @@ def get_run(run_id: str):
     return envelope(service.get_run(run_id))
 
 
+@app.get("/api/v1/runs/{run_id}/context-bundle")
+def context_bundle(run_id: str):
+    return envelope(service.get_context_bundle(run_id))
+
+
 @app.post("/api/v1/runs/{run_id}/evaluate")
 def evaluate(run_id: str, idempotency_key: IdempotencyKey):
     return idempotent(
@@ -175,6 +185,11 @@ def evaluate(run_id: str, idempotency_key: IdempotencyKey):
 )
 def decision_brief(run_id: str):
     return envelope(service.get_decision_brief(run_id))
+
+
+@app.get("/api/v1/runs/{run_id}/decision-trace")
+def decision_trace(run_id: str):
+    return envelope(service.get_decision_trace(run_id))
 
 
 @app.post("/api/v1/runs/{run_id}/action-previews")
@@ -215,6 +230,28 @@ def feedback(run_id: str, request: FeedbackRequest, idempotency_key: Idempotency
         request.model_dump(mode="json"),
         lambda connection: envelope(service.record_feedback(
             run_id, request.rating, request.reason, request.survey, connection,
+        )),
+    )
+
+
+@app.post("/api/v1/runs/{run_id}/outcome-feedback", status_code=201)
+def outcome_feedback(
+    run_id: str,
+    request: OutcomeFeedbackRequest,
+    idempotency_key: IdempotencyKey,
+):
+    return idempotent(
+        f"POST /api/v1/runs/{run_id}/outcome-feedback",
+        idempotency_key,
+        request.model_dump(mode="json"),
+        lambda connection: envelope(service.record_outcome_feedback(
+            run_id,
+            request.outcome,
+            request.actual_quantity_lb,
+            str(request.actual_cost_usd) if request.actual_cost_usd is not None else None,
+            request.reason,
+            request.survey,
+            connection,
         )),
     )
 

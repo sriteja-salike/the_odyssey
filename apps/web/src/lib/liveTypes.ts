@@ -1,5 +1,6 @@
-/* Shared shapes for the run API (live + offline fallback), extracted so the two
-   modules don't import each other cyclically. */
+/* Shared contracts for the durable API and the browser-only demo fallback.
+   Keeping one complete shape prevents offline mode from becoming a second,
+   weaker product path. */
 import type { DecisionKind, Phase } from "./runState";
 
 export interface KnowledgeSource {
@@ -12,16 +13,106 @@ export interface KnowledgeSource {
   payload_sha256: string;
 }
 
-export interface LiveExecution {
-  execution_id: string;
+export interface SolverView {
+  solver_id: string;
+  method: string;
+  version: string;
+  deterministic: boolean;
+  problem_types: string[];
+  capabilities: string[];
+  limitations: string[];
+}
+
+export interface AgentMetadata {
+  requested_mode: "offline" | "live";
+  effective_mode: "offline" | "live" | "offline_fallback";
+  status: "verified" | "live_configured" | "live_verified" | "fallback";
+  role: "DECISION_ORCHESTRATOR" | "INDEPENDENT_REVIEWER";
+  provider: string | null;
+  model: string | null;
+  prompt_version: string;
+  output_schema_version: string;
+  tool_contract_version: string;
+  tool_calls: string[];
+  fallback_code: string | null;
+}
+
+export interface DecisionAction {
+  evaluated_action_id: string;
   action_id: string;
-  execution_type: string;
-  status: string;
-  target_system: string;
-  quantity_lb: number;
+  display_name: string;
+  action_type: string;
+  category_id: string | null;
+  requested_quantity_lb: number;
   cost_usd: string;
-  arrival_week_start: string | null;
-  external_write_performed: boolean;
+  feasible: boolean;
+  rank: number | null;
+  score: string | null;
+  failed_constraints: string[];
+  failed_detail: Record<string, unknown>[];
+  evidence_ids: string[];
+}
+
+export interface DecisionRationale {
+  recommendation_id: string;
+  headline: string;
+  why_now: string;
+  why_this_action: string;
+  uncertainty: string;
+  why_not: { evaluated_action_id: string; explanation: string }[];
+  evidence_ids: string[];
+  requires_human_approval: true;
+  simulation_only: true;
+}
+
+export interface DecisionBrief {
+  schema_version: "decision-brief/1.0.0";
+  run_id: string;
+  scenario_id: string;
+  scenario_name: string;
+  decision_status: string;
+  status_message: string;
+  analysis_output_hash: string;
+  solver: SolverView;
+  primary_risk: {
+    risk_id: string;
+    risk_type: string;
+    category_id: string | null;
+    priority_score: string | null;
+    details: Record<string, unknown>;
+  } | null;
+  recommendation: {
+    recommendation_id: string;
+    risk_id: string;
+    action: DecisionAction;
+    confidence_label: string;
+    confidence_value: string;
+    requires_human_approval: true;
+  } | null;
+  rationale: DecisionRationale | null;
+  alternatives: DecisionAction[];
+  rejected_options: DecisionAction[];
+  blocking_issues: Record<string, unknown>[];
+  evidence: {
+    evidence_id: string;
+    source_kind: string;
+    trust_level: string;
+    title: string;
+    summary: string;
+    structured_facts: Record<string, unknown>[];
+    record_version: number;
+  }[];
+  approval: {
+    required: boolean;
+    allowed_commands: string[];
+    editable: boolean;
+    minimum_quantity_lb?: number | null;
+    maximum_quantity_lb?: number | null;
+    quantity_increment_lb?: number | null;
+    external_writes_allowed: false;
+  };
+  agent: AgentMetadata;
+  synthetic: true;
 }
 
 export interface LiveDecision {
@@ -29,7 +120,68 @@ export interface LiveDecision {
   kind: DecisionKind;
   action_id: string;
   quantity_lb: number;
-  reason?: string;
+  reason?: string | null;
+  recommendation_id?: string;
+}
+
+export interface ActionIntent {
+  schema_version: "action-intent/1.0.0";
+  action_intent_id: string;
+  run_id: string;
+  decision_id: string;
+  recommendation_id: string;
+  action_id: string;
+  action_type: string;
+  execution_type: string;
+  adapter_id: "simulated-operations-v1";
+  mode: "SIMULATED";
+  quantity_lb: number;
+  cost_usd: string;
+  arrival_week_start: string | null;
+  requires_human_approval: true;
+  approved_by: "MANAGER_UI";
+  external_write_allowed: false;
+  authority_input_sha256: string;
+  created_at_utc: string;
+}
+
+export interface LiveExecution {
+  schema_version: "execution-receipt/1.0.0";
+  execution_id: string;
+  action_intent_id: string;
+  run_id: string;
+  action_id: string;
+  execution_type: string;
+  adapter_id: "simulated-operations-v1";
+  mode: "SIMULATED";
+  status: "SIMULATED_COMPLETED";
+  target_system: string;
+  quantity_lb: number;
+  cost_usd: string;
+  arrival_week_start: string | null;
+  request_sha256: string;
+  external_write_performed: false;
+  completed_at_utc: string;
+}
+
+export interface DecisionTraceStage {
+  stage: string;
+  actor: string;
+  status: "PASSED" | "FALLBACK" | "SKIPPED";
+  duration_ms: number;
+  input_sha256: string;
+  output_sha256: string | null;
+  summary: string;
+  details: Record<string, unknown>;
+}
+
+export interface DecisionTrace {
+  schema_version: "decision-trace/1.0.0";
+  trace_id: string;
+  run_id: string;
+  exposes_chain_of_thought: false;
+  stages: DecisionTraceStage[];
+  final_status: string;
 }
 
 export interface LiveRun {
@@ -41,13 +193,17 @@ export interface LiveRun {
   state: Exclude<Phase, "ANALYZING">;
   revision: number;
   analysis: Record<string, unknown> | null;
-  decision_brief: {
-    schema_version: "decision-brief/1.0.0";
-    recommendation: { recommendation_id: string } | null;
-  } | null;
+  decision_brief: DecisionBrief | null;
   decision: LiveDecision | null;
   execution: LiveExecution | null;
+  action_intent: ActionIntent | null;
+  execution_receipt: LiveExecution | null;
   feedback: Record<string, unknown> | null;
+  outcome_feedback: Record<string, unknown> | null;
+  decision_trace: DecisionTrace | null;
+  solver?: SolverView | null;
+  agent?: AgentMetadata | null;
+  reviewer?: AgentMetadata | null;
   knowledge: {
     current: KnowledgeSource[];
     organizational: KnowledgeSource[];

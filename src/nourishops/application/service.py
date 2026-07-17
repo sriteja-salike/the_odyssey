@@ -3,16 +3,32 @@ from __future__ import annotations
 
 from dataclasses import replace
 from decimal import Decimal
+from time import perf_counter_ns
 from typing import Any
 from uuid import uuid4
 
-from nourishops.agents.contracts import DecisionAgent
+from nourishops.agents.contracts import DecisionAgent, DecisionReviewer
 from nourishops.agents.offline import OfflineDecisionAgent
+from nourishops.agents.reviewer import OfflineDecisionReviewer
 from nourishops.application.decision_package import (
     build_decision_brief,
     build_recommendation_package,
 )
-from nourishops.application.decisioning import SolverRegistry, UnsupportedDecisionProblem
+from nourishops.application.decision_trace import (
+    DecisionTraceStage,
+    TraceFinalStatus,
+    new_trace,
+)
+from nourishops.application.decisioning import (
+    InvalidSolverResult,
+    SolverRegistry,
+    UnsupportedDecisionProblem,
+    validate_solver_result,
+)
+from nourishops.application.execution import (
+    SimulatedExecutionAdapter,
+    build_action_intent,
+)
 from nourishops.persistence.postgres import PostgresStore, jsonable, sha256
 
 
@@ -26,10 +42,13 @@ class ApplicationError(Exception):
 
 class NourishOpsService:
     def __init__(self, store: PostgresStore, solver_registry: SolverRegistry | None = None,
-                 agent: DecisionAgent | None = None):
+                 agent: DecisionAgent | None = None,
+                 reviewer: DecisionReviewer | None = None):
         self.store = store
         self.solver_registry = solver_registry or SolverRegistry()
         self.agent = agent or OfflineDecisionAgent()
+        self.reviewer = reviewer or OfflineDecisionReviewer()
+        self.execution_adapter = SimulatedExecutionAdapter()
 
     def create_run(
         self, scenario_key: str, parent_run_id: str | None = None, connection=None,
@@ -38,9 +57,17 @@ class NourishOpsService:
             with self.store.connect() as owned:
                 return self.create_run(scenario_key, parent_run_id, owned)
         try:
-            run_id = self.store.create_run(scenario_key, parent_run_id, connection)
-        except (FileNotFoundError, KeyError, RuntimeError, ValueError) as exc:
+            self.store.scenario_registry.get(scenario_key)
+        except KeyError as exc:
             raise ApplicationError("SCENARIO_NOT_FOUND", "That synthetic scenario is unavailable.", 404) from exc
+        try:
+            run_id = self.store.create_run(scenario_key, parent_run_id, connection)
+        except (FileNotFoundError, RuntimeError, ValueError) as exc:
+            raise ApplicationError(
+                "SCENARIO_CONTRACT_INVALID",
+                "The scenario contract or its source snapshots are invalid.",
+                500,
+            ) from exc
         return self.get_run(run_id, connection)
 
     def get_run(self, run_id: str, connection=None) -> dict:
@@ -59,14 +86,46 @@ class NourishOpsService:
             )
         return run["decision_brief"]
 
+    def get_context_bundle(self, run_id: str) -> dict[str, Any]:
+        run = self.get_run(run_id)
+        context_hash = sha256({
+            "contract_snapshot_hash": run["contract_snapshot_hash"],
+            "context": run["context"],
+        })
+        return {
+            "schema_version": "context-bundle/1.0.0",
+            "run_id": run_id,
+            "scenario_id": run["scenario_id"],
+            "frozen": True,
+            "context_sha256": context_hash,
+            "contract_snapshot_hash": run["contract_snapshot_hash"],
+            "knowledge_sources": run["knowledge"],
+            "context": run["context"],
+            "quality": {"status": "COMPLETE", "missing": [], "conflicts": []},
+            "synthetic": True,
+        }
+
+    def get_decision_trace(self, run_id: str) -> dict[str, Any]:
+        run = self.get_run(run_id)
+        if run["decision_trace"] is None:
+            raise ApplicationError(
+                "DECISION_TRACE_NOT_READY",
+                "Analyze this run before requesting its decision trace.",
+                409,
+            )
+        return run["decision_trace"]
+
     def capabilities(self) -> dict[str, Any]:
         return {
             "scenario_context_version": "scenario-context/1.0.0",
+            "context_bundle_version": "context-bundle/1.0.0",
             "decision_brief_version": "decision-brief/1.0.0",
+            "decision_trace_version": "decision-trace/1.0.0",
             "recommendation_package_version": "recommendation-package/1.0.0",
             "agent": self.agent.describe().model_dump(mode="json"),
+            "reviewer": self.reviewer.describe().model_dump(mode="json"),
             "supported_agent_providers": ["offline", "anthropic", "openai"],
-            "agent_authority": "READ_ONLY_EXPLANATION",
+            "agent_authority": "READ_ONLY_RECOMMENDATION_AND_REVIEW",
             "scenario_packages": [
                 {
                     "package_id": package.package_id,
@@ -74,12 +133,22 @@ class NourishOpsService:
                     "scenario_keys": package.scenario_keys,
                     "problem_type": package.problem_type,
                     "solver_id": package.solver_id,
+                    "context_builder_id": package.context_builder_id,
                     "result_contract": package.result_contract,
                 }
                 for package in self.store.scenario_registry.packages()
             ],
+            "context_builders": self.store.context_builder_registry.describe(),
             "solvers": self.solver_registry.describe(),
-            "post_recommendation_workflows_enabled": False,
+            "post_recommendation_workflows_enabled": True,
+            "execution": {
+                "mode": "SIMULATED",
+                "requires_human_approval": True,
+                "external_writes_allowed": False,
+                "action_intent_version": "action-intent/1.0.0",
+                "execution_receipt_version": "execution-receipt/1.0.0",
+                "outcome_feedback_enabled": True,
+            },
         }
 
     def preview_action(
@@ -134,11 +203,146 @@ class NourishOpsService:
             }, connection)
             return self.get_run(run_id, connection)
 
+        context_hash = sha256(run["context"])
+        trace_stages = [DecisionTraceStage(
+            stage="CONTEXT_FROZEN",
+            actor="CONTEXT_LAYER",
+            status="PASSED",
+            duration_ms=0,
+            input_sha256=run["contract_snapshot_hash"],
+            output_sha256=context_hash,
+            summary="Pinned current, organizational, and scenario snapshots were loaded.",
+            details={
+                "document_count": len(run["input_manifest"]),
+                "current_sources": len(run["knowledge"]["current"]),
+                "organizational_sources": len(run["knowledge"]["organizational"]),
+                "simulation_sources": len(run["knowledge"]["simulation"]),
+            },
+        )]
+        solver_started = perf_counter_ns()
         result = jsonable(solver.solve(snapshot))
+        solver_duration_ms = (perf_counter_ns() - solver_started) // 1_000_000
+        try:
+            validate_solver_result(result, snapshot.scenario_id)
+        except InvalidSolverResult as exc:
+            self.store.append_event(run_id, "ANALYSIS_FAILED", "SYSTEM", {
+                "state": "FAILED",
+                "error": {"code": "INVALID_SOLVER_RESULT", "message": str(exc)},
+            }, connection)
+            return self.get_run(run_id, connection)
         analysis_output_hash = sha256(result)
+        trace_stages.append(DecisionTraceStage(
+            stage="DETERMINISTIC_SOLVER",
+            actor="SOLVER",
+            status="PASSED",
+            duration_ms=solver_duration_ms,
+            input_sha256=context_hash,
+            output_sha256=analysis_output_hash,
+            summary="The deterministic solver evaluated and ranked the declared action catalog.",
+            details={
+                "solver_id": solver.descriptor.solver_id,
+                "decision_status": result["decision_status"],
+                "evaluated_actions": len(result.get("action_evaluations", [])),
+            },
+        ))
         package = build_recommendation_package(result, run["context"], solver.descriptor)
+        orchestrator_started = perf_counter_ns()
         agent_outcome = self.agent.explain(package) if package is not None else None
+        orchestrator_duration_ms = (perf_counter_ns() - orchestrator_started) // 1_000_000
         agent_metadata = agent_outcome.metadata if agent_outcome else self.agent.describe()
+        orchestrator_output_hash = (
+            sha256(agent_outcome.explanation.model_dump(mode="json"))
+            if agent_outcome else None
+        )
+        trace_stages.append(DecisionTraceStage(
+            stage="DECISION_ORCHESTRATOR",
+            actor="AI_AGENT",
+            status=(
+                "SKIPPED" if package is None
+                else "FALLBACK" if agent_metadata.fallback_code
+                else "PASSED"
+            ),
+            duration_ms=orchestrator_duration_ms,
+            input_sha256=analysis_output_hash,
+            output_sha256=orchestrator_output_hash,
+            summary=(
+                "No recommendation required an explanation."
+                if package is None
+                else "The orchestrator produced a schema-validated, evidence-grounded explanation."
+            ),
+            details={
+                "effective_mode": agent_metadata.effective_mode,
+                "provider": agent_metadata.provider,
+                "model": agent_metadata.model,
+                "fallback_code": agent_metadata.fallback_code,
+                "tool_calls": agent_metadata.tool_calls,
+            },
+        ))
+
+        reviewer_outcome = None
+        reviewer_started = perf_counter_ns()
+        if package is not None and agent_outcome is not None:
+            reviewer_outcome = self.reviewer.review(package, agent_outcome.explanation)
+        reviewer_duration_ms = (perf_counter_ns() - reviewer_started) // 1_000_000
+        reviewer_metadata = (
+            reviewer_outcome.metadata if reviewer_outcome else self.reviewer.describe()
+        )
+        reviewer_output_hash = (
+            sha256(reviewer_outcome.verdict.model_dump(mode="json"))
+            if reviewer_outcome else None
+        )
+        trace_stages.append(DecisionTraceStage(
+            stage="INDEPENDENT_REVIEWER",
+            actor="AI_AGENT",
+            status=(
+                "SKIPPED" if package is None
+                else "FALLBACK" if reviewer_metadata.fallback_code
+                else "PASSED"
+            ),
+            duration_ms=reviewer_duration_ms,
+            input_sha256=orchestrator_output_hash or analysis_output_hash,
+            output_sha256=reviewer_output_hash,
+            summary=(
+                "No recommendation required independent review."
+                if package is None
+                else "An isolated reviewer verified authority, evidence, approval, and simulation boundaries."
+            ),
+            details={
+                "effective_mode": reviewer_metadata.effective_mode,
+                "provider": reviewer_metadata.provider,
+                "model": reviewer_metadata.model,
+                "fallback_code": reviewer_metadata.fallback_code,
+                "verdict": reviewer_outcome.verdict.verdict if reviewer_outcome else None,
+                "reason_codes": (
+                    reviewer_outcome.verdict.reason_codes if reviewer_outcome else []
+                ),
+                "tool_calls": reviewer_metadata.tool_calls,
+            },
+        ))
+        authority_input_hash = reviewer_output_hash or analysis_output_hash
+        trace_stages.append(DecisionTraceStage(
+            stage="AUTHORITY_VALIDATOR",
+            actor="POLICY_ENGINE",
+            status="PASSED",
+            duration_ms=0,
+            input_sha256=authority_input_hash,
+            output_sha256=analysis_output_hash,
+            summary="The backend confirmed that AI did not calculate, rank, write, or execute.",
+            details={
+                "recommendation_authority": "DETERMINISTIC_SOLVER",
+                "write_authority": "APPLICATION_SERVICE",
+                "requires_human_approval": package is not None,
+                "external_writes_allowed": False,
+            },
+        ))
+        final_trace_status: TraceFinalStatus
+        if result["decision_status"] == "READY_FOR_REVIEW":
+            final_trace_status = "PASSED"
+        elif result["decision_status"] == "ABSTAINED":
+            final_trace_status = "ABSTAINED"
+        else:
+            final_trace_status = "NO_ACTION"
+        decision_trace = new_trace(run_id, trace_stages, final_trace_status)
         decision_brief = build_decision_brief(
             run_id=run_id,
             analysis=result,
@@ -154,6 +358,17 @@ class NourishOpsService:
                 "fallback_code": agent_metadata.fallback_code,
                 "agent": agent_metadata.model_dump(mode="json"),
             }, connection)
+        if reviewer_metadata.fallback_code:
+            self.store.append_event(run_id, "REVIEWER_FALLBACK_USED", "LLM_ADAPTER", {
+                "state": "DRAFT",
+                "fallback_code": reviewer_metadata.fallback_code,
+                "reviewer": reviewer_metadata.model_dump(mode="json"),
+            }, connection)
+        self.store.append_event(run_id, "DECISION_TRACE_RECORDED", "SYSTEM", {
+            "state": "DRAFT",
+            "decision_trace": decision_trace,
+            "reviewer": reviewer_metadata.model_dump(mode="json"),
+        }, connection)
         state = result["decision_status"]
         event_type = (
             "RECOMMENDATION_PREPARED" if state == "READY_FOR_REVIEW"
@@ -167,11 +382,9 @@ class NourishOpsService:
             "decision_brief": decision_brief,
             "solver": solver.descriptor.as_dict(),
             "agent": agent_metadata.model_dump(mode="json"),
+            "reviewer": reviewer_metadata.model_dump(mode="json"),
             "knowledge_sources": run["knowledge"],
-            "trace": [
-                "SOURCE_RECORDS_LOADED", "SCENARIO_VALIDATED", "FORECAST_COMPUTED",
-                "RISKS_DETECTED", "ACTIONS_RANKED", "DECISION_BRIEF_PREPARED",
-            ],
+            "trace": [stage.stage for stage in trace_stages],
         }, connection)
         return self.get_run(run_id, connection)
 
@@ -224,8 +437,9 @@ class NourishOpsService:
             "approve": "APPROVED", "edit-approve": "APPROVED",
             "reject": "REJECTED", "defer": "DEFERRED",
         }[normalized_kind]
+        decision_id = f"DEC-{uuid4().hex[:10].upper()}"
         decision_record = {
-            "decision_id": f"DEC-{uuid4().hex[:10].upper()}",
+            "decision_id": decision_id,
             "kind": normalized_kind,
             "action_id": action_id,
             "quantity_lb": quantity_lb,
@@ -234,36 +448,41 @@ class NourishOpsService:
         }
         event_payload = {"state": state, "decision": decision_record}
 
-        execution = None
+        action_intent = None
+        execution_receipt = None
         if state == "APPROVED" and evaluation is not None:
             action = evaluation["action"]
-            execution_type = {
-                "PURCHASE": "PURCHASE_ORDER_REQUEST",
-                "REQUEST_TRANSFER": "PEER_TRANSFER_REQUEST",
-                "TARGETED_DONOR_REQUEST": "DONOR_OUTREACH_REQUEST",
-                "ACCEPT_DONATION": "DONATION_ACCEPTANCE_REQUEST",
-                "PARTIAL_ACCEPT": "PARTIAL_DONATION_ACCEPTANCE_REQUEST",
-                "REDIRECT_DONATION": "DONATION_REDIRECT_REQUEST",
-                "ACCELERATE_DISTRIBUTION": "DISTRIBUTION_TASK_REQUEST",
-            }.get(action["action_type"], "OPERATIONS_TASK_REQUEST")
-            execution = {
-                "execution_id": f"SIM-{uuid4().hex[:10].upper()}",
-                "action_id": action_id,
-                "execution_type": execution_type,
-                "status": "SIMULATED_SUBMITTED",
-                "target_system": "Synthetic operations gateway",
-                "quantity_lb": quantity_lb,
-                "cost_usd": evaluation["cost_usd"],
-                "arrival_week_start": action.get("arrival_week_start"),
-                "external_write_performed": False,
-            }
+            authority_input_sha256 = sha256({
+                "run_id": run_id,
+                "revision": run["revision"],
+                "recommendation_id": recommendation.get("recommendation_id"),
+                "decision": decision_record,
+                "evaluation": evaluation,
+            })
+            action_intent_model = build_action_intent(
+                run_id=run_id,
+                decision_id=decision_id,
+                recommendation_id=recommendation["recommendation_id"],
+                action=action,
+                evaluation=evaluation,
+                authority_input_sha256=authority_input_sha256,
+            )
+            action_intent = action_intent_model.model_dump(mode="json")
+            execution_receipt = self.execution_adapter.execute(
+                action_intent_model,
+            ).model_dump(mode="json")
 
         event_type = {
             "approve": "MANAGER_APPROVED", "edit-approve": "MANAGER_EDITED_APPROVED",
             "reject": "MANAGER_REJECTED", "defer": "MANAGER_DEFERRED",
         }[normalized_kind]
         self.store.append_decision_with_execution(
-            run_id, event_type, event_payload, execution, connection,
+            run_id,
+            event_type,
+            event_payload,
+            action_intent,
+            execution_receipt,
+            connection,
         )
         return self.get_run(run_id, connection)
 
@@ -281,6 +500,53 @@ class NourishOpsService:
         return self.store.add_feedback(
             run_id, recommendation_id, rating,
             reason.strip() if reason else None, survey, connection,
+        )
+
+    def record_outcome_feedback(
+        self,
+        run_id: str,
+        outcome: str,
+        actual_quantity_lb: int | None,
+        actual_cost_usd: str | None,
+        reason: str | None,
+        survey: dict[str, Any],
+        connection=None,
+    ) -> dict:
+        if connection is None:
+            with self.store.connect() as owned:
+                return self.record_outcome_feedback(
+                    run_id,
+                    outcome,
+                    actual_quantity_lb,
+                    actual_cost_usd,
+                    reason,
+                    survey,
+                    owned,
+                )
+        self.store.lock_run(connection, run_id)
+        run = self.get_run(run_id, connection)
+        receipt = run.get("execution_receipt")
+        if receipt is None:
+            raise ApplicationError(
+                "NO_EXECUTION_RECEIPT",
+                "Approve and complete a simulated action before recording its outcome.",
+                409,
+            )
+        clean_reason = reason.strip() if reason else None
+        if outcome in {"PARTIAL", "FAILED"} and not clean_reason:
+            raise ApplicationError(
+                "INVALID_REQUEST",
+                "A reason is required for a partial or failed outcome.",
+            )
+        return self.store.add_outcome_feedback(
+            run_id,
+            receipt["execution_id"],
+            outcome,
+            actual_quantity_lb,
+            actual_cost_usd,
+            clean_reason,
+            survey,
+            connection,
         )
 
     def _evaluate_action(self, run_id: str, action_id: str,
@@ -318,6 +584,12 @@ class NourishOpsService:
             run.get("solver_id"),
         )
         result = jsonable(solver.solve(edited_snapshot))
+        try:
+            validate_solver_result(result, edited_snapshot.scenario_id)
+        except InvalidSolverResult as exc:
+            raise ApplicationError(
+                "INVALID_SOLVER_RESULT", "The deterministic solver returned invalid data.", 500,
+            ) from exc
         evaluation = next(
             (
                 item for item in result.get("action_evaluations", [])

@@ -21,6 +21,11 @@ from nourishops.agents.contracts import (
 from nourishops.agents.live import PydanticAIDecisionAgent, validate_explanation
 from nourishops.agents.offline import OfflineDecisionAgent
 from nourishops.agents.runtime import ResilientDecisionAgent
+from nourishops.agents.reviewer import (
+    REVIEW_REASON_CODES,
+    OfflineDecisionReviewer,
+    PydanticAIDecisionReviewer,
+)
 from nourishops.application.context import build_scenario_context
 from nourishops.application.decision_package import build_recommendation_package
 from nourishops.application.decisioning import CatalogEnumerationSolver
@@ -99,6 +104,49 @@ def test_anthropic_and_openai_share_the_same_typed_agent_path() -> None:
         assert outcome.metadata.tool_calls == ["get_recommendation_package"]
 
 
+def test_independent_reviewer_has_a_separate_read_only_tool_path() -> None:
+    package = scenario_b_package()
+    explanation = OfflineDecisionAgent().explain(package).explanation
+    review_output = {
+        "recommendation_id": package["recommendation"]["recommendation_id"],
+        "verdict": "PASS",
+        "reason_codes": REVIEW_REASON_CODES,
+        "requires_human_approval": True,
+        "simulation_only": True,
+    }
+
+    def respond(messages, info: AgentInfo) -> ModelResponse:
+        if len(messages) == 1:
+            return ModelResponse(parts=[ToolCallPart(
+                info.function_tools[0].name,
+                {"recommendation_id": package["recommendation"]["recommendation_id"]},
+            )])
+        return ModelResponse(parts=[ToolCallPart(info.output_tools[0].name, review_output)])
+
+    reviewer = PydanticAIDecisionReviewer(
+        model_name="anthropic:test-model",
+        provider="anthropic",
+        request_timeout_seconds=1,
+        deadline_seconds=2,
+        model=FunctionModel(respond),
+    )
+    outcome = reviewer.review(package, explanation)
+
+    assert outcome.verdict.verdict == "PASS"
+    assert outcome.verdict.reason_codes == REVIEW_REASON_CODES
+    assert outcome.metadata.role == "INDEPENDENT_REVIEWER"
+    assert outcome.metadata.tool_calls == ["get_review_material"]
+
+
+def test_offline_reviewer_revalidates_the_explanation() -> None:
+    package = scenario_b_package()
+    explanation = OfflineDecisionAgent().explain(package).explanation
+    outcome = OfflineDecisionReviewer().review(package, explanation)
+
+    assert outcome.verdict.recommendation_id == "REC-B-001"
+    assert outcome.metadata.effective_mode == "offline"
+
+
 def test_agent_output_with_invented_number_is_rejected() -> None:
     package = scenario_b_package()
     with pytest.raises((ValidationError, AgentAuthorityError)):
@@ -116,6 +164,9 @@ def test_agent_output_with_invented_number_is_rejected() -> None:
     "The modeled cost is 1 dollars.",
     "Choose ACTION-FAKE instead.",
     "We already contacted the donor and submitted the request.",
+    "The supplier was emailed about the plan.",
+    "There are ninety new suppliers.",
+    "Children will receive fresh food.",
 ])
 def test_agent_output_cannot_add_numbers_ids_or_execution_claims(claim: str) -> None:
     package = scenario_b_package()
@@ -141,13 +192,14 @@ def test_agent_output_requires_exact_headline_and_selected_evidence() -> None:
             validate_explanation(explanation, package, ["get_recommendation_package"])
 
 
-def test_exact_word_form_fact_is_verified_by_unit_semantics() -> None:
+def test_even_true_freeform_fact_is_rejected_outside_grounded_templates() -> None:
     package = scenario_b_package()
     explanation = AgentExplanation.model_validate({
         **valid_live_output(package),
         "why_now": "The verified offer has five days of usable life.",
     })
-    validate_explanation(explanation, package, ["get_recommendation_package"])
+    with pytest.raises(AgentAuthorityError, match="unverified narrative"):
+        validate_explanation(explanation, package, ["get_recommendation_package"])
 
 
 def test_agent_output_rejects_blank_fields_and_more_than_120_words() -> None:

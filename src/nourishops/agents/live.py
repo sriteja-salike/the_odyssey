@@ -23,6 +23,8 @@ from nourishops.agents.contracts import (
     AgentExplanation,
     AgentMetadata,
     AgentOutcome,
+    grounded_primary_narrative,
+    grounded_why_not_narrative,
 )
 
 SYSTEM_PROMPT = """You are the NourishOps read-only planning orchestrator in a synthetic
@@ -262,6 +264,20 @@ def validate_explanation(
     if _numeric_tokens(narrative) or not _word_numeric_claims_supported(narrative, package):
         raise AgentAuthorityError("The model introduced numeric prose")
 
+    expected = grounded_primary_narrative(package)
+    if (
+        explanation.why_now != expected["why_now"]
+        or explanation.why_this_action != expected["why_this_action"]
+        or explanation.uncertainty != expected["uncertainty"]
+    ):
+        raise AgentAuthorityError("The model introduced unverified narrative")
+    grounded_why_not = grounded_why_not_narrative(package)
+    if any(
+        item.explanation != grounded_why_not[item.evaluated_action_id]
+        for item in explanation.why_not
+    ):
+        raise AgentAuthorityError("The model changed a verified alternative explanation")
+
     prose = [explanation.headline, *narrative]
     unknown_identifiers = _identifier_tokens(prose) - _identifier_tokens(package)
     if unknown_identifiers:
@@ -316,6 +332,7 @@ class PydanticAIDecisionAgent:
         scenario_id = package["scenario"]["scenario_id"]
         headline = package["selected_action"]["display_name"]
         evidence_ids = package["selected_action"]["evidence_ids"]
+        grounded = grounded_primary_narrative(package)
 
         async def run_agent():
             for attempt in range(self.max_retries + 1):
@@ -327,11 +344,10 @@ class PydanticAIDecisionAgent:
                             f"scenario {scenario_id}. Use the read-only package tool first. "
                             "Then return every required structured field. Copy the headline "
                             f"exactly as {headline!r}. Copy evidence_ids exactly as "
-                            f"{evidence_ids!r}. Set why_not to an empty list. Keep why_now, "
-                            "why_this_action, and uncertainty to at most 15 words each. The "
-                            "uncertainty sentence must include both simulated and approval. "
-                            "Outside headline, use no digits and spell out no number words "
-                            "such as one, two, or five."
+                            f"{evidence_ids!r}. Set why_not to an empty list. Copy why_now "
+                            f"exactly as {grounded['why_now']!r}. Copy why_this_action exactly "
+                            f"as {grounded['why_this_action']!r}. Copy uncertainty exactly as "
+                            f"{grounded['uncertainty']!r}."
                         ),
                         deps=deps,
                         usage_limits=UsageLimits(request_limit=3, tool_calls_limit=2),

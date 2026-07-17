@@ -1,9 +1,5 @@
-/* Mock API layer.
-
-   There is no running backend yet, so the frontend builds against the frozen
-   golden JSON — which IS the API response contract (BACKEND_HANDOFF §5). When the
-   real FastAPI lands, only this file changes: swap the imports for fetch() calls
-   to /api/v1/*. Components consume these functions, not raw JSON. */
+/* Frozen presentation fixtures and scenario metadata. Durable lifecycle data,
+   decision briefs, traces, executions, and feedback come from liveApi.ts. */
 
 import type { GoldenOutput } from "../types/golden";
 
@@ -80,9 +76,9 @@ const ACTIONS = (candidateActions as { records: ActionRecord[] }).records;
 
 export const SCENARIOS: { letter: ScenarioLetter; label: string; inScope: boolean }[] = [
   { letter: "A", label: "A · USDA protein shipment delay", inScope: true },
-  { letter: "B", label: "B · Short-life produce offer", inScope: false },
-  { letter: "C", label: "C · Donation mismatch", inScope: false },
-  { letter: "D", label: "D · Budget conflict", inScope: false },
+  { letter: "B", label: "B · Short-life produce offer", inScope: true },
+  { letter: "C", label: "C · Donation mismatch", inScope: true },
+  { letter: "D", label: "D · Budget conflict", inScope: true },
   { letter: "E", label: "E · Missing / conflicting data", inScope: true },
 ];
 
@@ -121,7 +117,7 @@ export interface Notice {
   source_kind: string;
   trust_level: string;
 }
-interface EvidenceRecord {
+export interface EvidenceRecord {
   evidence_id: string;
   scenario_ids?: string[];
   source_kind: string;
@@ -129,15 +125,21 @@ interface EvidenceRecord {
   title: string;
   body: string;
   recorded_at: string;
+  structured_facts?: Record<string, unknown>[];
+  record_version?: number;
+}
+
+const EVIDENCE = (evidenceRecords as { records: EvidenceRecord[] }).records;
+
+/** Frozen evidence records in scope for one scenario. */
+export function getScenarioEvidence(letter: ScenarioLetter): EvidenceRecord[] {
+  const scenarioId = getOverlay(letter).scenario_id;
+  return EVIDENCE.filter((record) => (record.scenario_ids ?? []).includes(scenarioId));
 }
 
 /** The imported disruption notice shown in the Draft state (01 §6.2). */
 export function getNotice(letter: ScenarioLetter): Notice | null {
-  const scenarioId = getOverlay(letter).scenario_id;
-  const records = (evidenceRecords as { records: EvidenceRecord[] }).records;
-  const n = records.find(
-    (r) => r.source_kind === "SYNTHETIC_NOTICE" && (r.scenario_ids ?? []).includes(scenarioId)
-  );
+  const n = getScenarioEvidence(letter).find((record) => record.source_kind === "SYNTHETIC_NOTICE");
   return n ? { title: n.title, body: n.body, recorded_at: n.recorded_at, source_kind: n.source_kind, trust_level: n.trust_level } : null;
 }
 

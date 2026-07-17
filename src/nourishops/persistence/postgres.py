@@ -16,8 +16,12 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from nourishops.application.context import build_scenario_context
-from nourishops.application.loader import FIXTURES, load_scenario_from_documents
+from nourishops.application.context import ContextBuilderRegistry
+from nourishops.application.loader import (
+    FIXTURES,
+    load_scenario_from_documents,
+    snapshot_schema_documents,
+)
 from nourishops.application.scenario_registry import (
     ScenarioPackageDefinition,
     ScenarioRegistry,
@@ -65,10 +69,14 @@ class IdempotencyKeyReused(RuntimeError):
 
 class PostgresStore:
     def __init__(
-        self, database_url: str, scenario_registry: ScenarioRegistry | None = None,
+        self,
+        database_url: str,
+        scenario_registry: ScenarioRegistry | None = None,
+        context_builder_registry: ContextBuilderRegistry | None = None,
     ):
         self.database_url = database_url
         self.scenario_registry = scenario_registry or DEFAULT_SCENARIO_REGISTRY
+        self.context_builder_registry = context_builder_registry or ContextBuilderRegistry()
 
     @staticmethod
     def _require_supported_normalizer(package: ScenarioPackageDefinition) -> None:
@@ -81,13 +89,36 @@ class PostgresStore:
     def _normalize_scenario(
         self, documents: dict[str, str], scenario_key: str,
         package: ScenarioPackageDefinition,
+        schema_documents: dict[str, dict[str, Any]] | None = None,
     ):
         self._require_supported_normalizer(package)
         return load_scenario_from_documents(
             documents,
             scenario_key,
             overlay_schema_name=package.overlay.schema_name,
+            source_schema_map={
+                item.document_id: item.schema_name for item in package.source_inputs
+            },
+            schema_documents=schema_documents,
         )
+
+    @staticmethod
+    def _schema_snapshot(
+        package: ScenarioPackageDefinition,
+    ) -> dict[str, dict[str, Any]]:
+        return snapshot_schema_documents({
+            *(item.schema_name for item in package.source_inputs),
+            package.overlay.schema_name,
+        })
+
+    @staticmethod
+    def _expected_sources(
+        package: ScenarioPackageDefinition, scenario_key: str,
+    ) -> dict[str, str]:
+        return {
+            **{item.document_id: item.source_id for item in package.source_inputs},
+            package.overlay.document_id(scenario_key): "scenario-simulator",
+        }
 
     def connect(self):
         return psycopg.connect(self.database_url, row_factory=dict_row)
@@ -197,24 +228,47 @@ class PostgresStore:
     def load_scenario(self, scenario_key: str):
         package = self.scenario_registry.get(scenario_key)
         names = self._scenario_names(scenario_key)
-        documents = self._latest_documents(names)
-        return self._normalize_scenario(documents, scenario_key, package)
+        documents = self._latest_documents(
+            names, self._expected_sources(package, scenario_key),
+        )
+        return self._normalize_scenario(
+            documents, scenario_key, package, self._schema_snapshot(package),
+        )
 
     def scenario_context(self, scenario_key: str) -> dict[str, Any]:
-        names = self._scenario_names(scenario_key)
-        return jsonable(build_scenario_context(self._latest_documents(names), scenario_key))
+        package = self.scenario_registry.get(scenario_key)
+        names = package.document_ids(scenario_key)
+        documents = self._latest_documents(
+            names, self._expected_sources(package, scenario_key),
+        )
+        return jsonable(self.context_builder_registry.build(
+            package.context_builder_id, documents, scenario_key,
+        ))
 
     def load_run_scenario(self, run_id: str, connection=None):
         run, documents = self._run_documents(run_id, connection)
         package = self._package_for_run(run)
-        return self._normalize_scenario(documents, run["scenario_key"], package)
+        return self._normalize_scenario(
+            documents,
+            run["scenario_key"],
+            package,
+            run.get("schema_documents"),
+        )
 
     def run_context(self, run_id: str, connection=None) -> dict[str, Any]:
         run, documents = self._run_documents(run_id, connection)
-        return jsonable(build_scenario_context(documents, run["scenario_key"]))
+        package = self._package_for_run(run)
+        return jsonable(self.context_builder_registry.build(
+            package.context_builder_id, documents, run["scenario_key"],
+        ))
 
     def _package_for_run(self, run: dict[str, Any]) -> ScenarioPackageDefinition:
-        package = self.scenario_registry.get(run["scenario_key"])
+        package_definition = run.get("package_definition")
+        package = (
+            ScenarioPackageDefinition.model_validate(package_definition)
+            if package_definition is not None
+            else self.scenario_registry.get(run["scenario_key"])
+        )
         pinned = run.get("scenario_package_id")
         pinned_version = run.get("scenario_package_version")
         if pinned is not None and (
@@ -256,9 +310,11 @@ class PostgresStore:
             })
         return jsonable(scenarios)
 
-    def _latest_documents(self, names: list[str]) -> dict[str, str]:
+    def _latest_documents(
+        self, names: list[str], expected_sources: dict[str, str] | None = None,
+    ) -> dict[str, str]:
         with self.connect() as connection:
-            rows = self._latest_document_rows(connection, names)
+            rows = self._latest_document_rows(connection, names, expected_sources)
         documents = {row["document_id"]: row["payload_text"] for row in rows}
         missing = sorted(set(names) - documents.keys())
         if missing:
@@ -266,17 +322,30 @@ class PostgresStore:
         return documents
 
     @staticmethod
-    def _latest_document_rows(connection, names: list[str]) -> list[dict]:
-        placeholders = ",".join(["%s"] * len(names))
+    def _latest_document_rows(
+        connection, names: list[str], expected_sources: dict[str, str] | None = None,
+    ) -> list[dict]:
+        if expected_sources is None:
+            predicate = f"document_id IN ({','.join(['%s'] * len(names))})"
+            parameters: list[str] = names
+        else:
+            predicate = " OR ".join(
+                "(document_id = %s AND source_id = %s)" for _ in names
+            )
+            parameters = [
+                value
+                for name in names
+                for value in (name, expected_sources[name])
+            ]
         return connection.execute(
             f"""SELECT DISTINCT ON (document_id)
                        document_id, source_id, source_version, observed_at_utc,
                        payload_text, payload_sha256
                 FROM integration.snapshots
-                WHERE document_id IN ({placeholders})
+                WHERE {predicate}
                 ORDER BY document_id, observed_at_utc DESC,
                          source_version DESC, payload_sha256 DESC""",
-            names,
+            parameters,
         ).fetchall()
 
     def _run_documents(
@@ -284,9 +353,12 @@ class PostgresStore:
     ) -> tuple[dict[str, Any], dict[str, str]]:
         with self.connection_scope(connection) as active:
             run = active.execute(
-                """SELECT scenario_key, scenario_package_id, scenario_package_version,
-                          problem_type, solver_id
-                   FROM nourishops_app.runs WHERE run_id = %s""",
+                """SELECT r.scenario_key, r.scenario_package_id,
+                          r.scenario_package_version, r.problem_type, r.solver_id,
+                          c.package_definition, c.schema_documents
+                   FROM nourishops_app.runs r
+                   LEFT JOIN nourishops_app.run_contract_snapshots c USING (run_id)
+                   WHERE r.run_id = %s""",
                 (run_id,),
             ).fetchone()
             if run is None:
@@ -298,7 +370,8 @@ class PostgresStore:
                 (run_id,),
             ).fetchall()
         documents = {row["document_id"]: row["payload_text"] for row in rows}
-        expected = set(self._scenario_names(run["scenario_key"]))
+        package = self._package_for_run(run)
+        expected = set(package.document_ids(run["scenario_key"]))
         missing = sorted(expected - documents.keys())
         if missing:
             raise RuntimeError(f"Run input documents missing: {', '.join(missing)}")
@@ -349,12 +422,17 @@ class PostgresStore:
             package = self.scenario_registry.get(scenario_key)
             self._require_supported_normalizer(package)
             names = self._scenario_names(scenario_key)
-            rows = self._latest_document_rows(active, names)
+            rows = self._latest_document_rows(
+                active, names, self._expected_sources(package, scenario_key),
+            )
             documents = {row["document_id"]: row["payload_text"] for row in rows}
             missing = sorted(set(names) - documents.keys())
             if missing:
                 raise RuntimeError(f"Integration snapshots missing: {', '.join(missing)}")
-            snapshot = self._normalize_scenario(documents, scenario_key, package)
+            schema_documents = self._schema_snapshot(package)
+            snapshot = self._normalize_scenario(
+                documents, scenario_key, package, schema_documents,
+            )
             scenario_id = snapshot.scenario_id
             overlay = json.loads(documents[f"scenarios/{scenario_key}.json"], parse_float=Decimal)
             version_bundle = {
@@ -368,6 +446,7 @@ class PostgresStore:
                 "staged_overlay": overlay,
                 "version_bundle": version_bundle,
                 "scenario_package": package.model_dump(mode="json"),
+                "schema_documents": schema_documents,
             })
             active.execute(
                 """INSERT INTO nourishops_app.runs
@@ -378,6 +457,17 @@ class PostgresStore:
                 (run_id, scenario_key, scenario_id, parent_run_id, now,
                  contract_snapshot_hash, package.package_id, package.package_version,
                  package.problem_type, package.solver_id),
+            )
+            active.execute(
+                """INSERT INTO nourishops_app.run_contract_snapshots
+                   (run_id, package_definition, schema_documents, created_at_utc)
+                   VALUES (%s, %s, %s, %s)""",
+                (
+                    run_id,
+                    Jsonb(package.model_dump(mode="json")),
+                    Jsonb(schema_documents),
+                    now,
+                ),
             )
             for row in rows:
                 active.execute(
@@ -425,23 +515,54 @@ class PostgresStore:
             self._append_event(active, run_id, event_type, actor_type, payload, utcnow())
 
     def append_decision_with_execution(
-        self, run_id: str, event_type: str, decision: dict, execution: dict | None,
+        self, run_id: str, event_type: str, decision: dict,
+        action_intent: dict | None, execution_receipt: dict | None,
         connection=None,
     ) -> None:
         now = utcnow()
         with self.connection_scope(connection) as active:
+            if action_intent:
+                active.execute(
+                    """INSERT INTO nourishops_app.action_intents
+                       (action_intent_id, run_id, recommendation_id, action_id,
+                        execution_type, payload, payload_sha256, created_at_utc)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                    (
+                        action_intent["action_intent_id"],
+                        run_id,
+                        action_intent["recommendation_id"],
+                        action_intent["action_id"],
+                        action_intent["execution_type"],
+                        Jsonb(action_intent),
+                        sha256(action_intent),
+                        action_intent["created_at_utc"],
+                    ),
+                )
+                decision = {**decision, "action_intent": action_intent}
             self._append_event(active, run_id, event_type, "MANAGER_UI", decision, now)
-            if execution:
+            if execution_receipt:
                 active.execute(
                     """INSERT INTO nourishops_app.simulated_executions
                        (execution_id, run_id, action_id, execution_type, status, payload, created_at_utc)
                        VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-                    (execution["execution_id"], run_id, execution["action_id"],
-                     execution["execution_type"], execution["status"], Jsonb(execution), now),
+                    (
+                        execution_receipt["execution_id"],
+                        run_id,
+                        execution_receipt["action_id"],
+                        execution_receipt["execution_type"],
+                        execution_receipt["status"],
+                        Jsonb(execution_receipt),
+                        execution_receipt["completed_at_utc"],
+                    ),
                 )
                 self._append_event(
-                    active, run_id, "SIMULATED_ACTION_APPLIED", "SYSTEM",
-                    {"state": "APPROVED", "execution": execution}, now,
+                    active, run_id, "SIMULATED_ACTION_COMPLETED", "SYSTEM",
+                    {
+                        "state": "APPROVED",
+                        "execution": execution_receipt,
+                        "execution_receipt": execution_receipt,
+                    },
+                    now,
                 )
 
     def add_feedback(self, run_id: str, recommendation_id: str, rating: str,
@@ -464,6 +585,55 @@ class PostgresStore:
             )
             self._append_event(active, run_id, "RECOMMENDATION_FEEDBACK", "MANAGER_UI",
                                {"feedback": feedback}, utcnow())
+        return feedback
+
+    def add_outcome_feedback(
+        self,
+        run_id: str,
+        execution_id: str,
+        outcome: str,
+        actual_quantity_lb: int | None,
+        actual_cost_usd: str | None,
+        reason: str | None,
+        survey: dict,
+        connection=None,
+    ) -> dict:
+        feedback = {
+            "outcome_feedback_id": f"OUT-{uuid4().hex[:10].upper()}",
+            "execution_id": execution_id,
+            "outcome": outcome,
+            "actual_quantity_lb": actual_quantity_lb,
+            "actual_cost_usd": actual_cost_usd,
+            "reason": reason,
+            "survey": survey,
+            "created_at_utc": jsonable(utcnow()),
+        }
+        with self.connection_scope(connection) as active:
+            active.execute(
+                """INSERT INTO nourishops_app.outcome_feedback
+                   (outcome_feedback_id, run_id, execution_id, outcome,
+                    actual_quantity_lb, actual_cost_usd, reason, survey, created_at_utc)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                (
+                    feedback["outcome_feedback_id"],
+                    run_id,
+                    execution_id,
+                    outcome,
+                    actual_quantity_lb,
+                    actual_cost_usd,
+                    reason,
+                    Jsonb(survey),
+                    feedback["created_at_utc"],
+                ),
+            )
+            self._append_event(
+                active,
+                run_id,
+                "OUTCOME_FEEDBACK_RECORDED",
+                "MANAGER_UI",
+                {"outcome_feedback": feedback},
+                utcnow(),
+            )
         return feedback
 
     def get_run(self, run_id: str, connection=None) -> dict | None:
@@ -489,22 +659,31 @@ class PostgresStore:
 
         state = "DRAFT"
         analysis = decision = execution = feedback = decision_brief = None
-        solver = agent = None
+        action_intent = execution_receipt = outcome_feedback = decision_trace = None
+        solver = agent = reviewer = None
         for event in events:
             payload = event["payload"]
             state = payload.get("state", state)
             analysis = payload.get("analysis", analysis)
             decision = payload.get("decision", decision)
             execution = payload.get("execution", execution)
+            action_intent = payload.get("action_intent", action_intent)
+            execution_receipt = payload.get("execution_receipt", execution_receipt)
             feedback = payload.get("feedback", feedback)
+            outcome_feedback = payload.get("outcome_feedback", outcome_feedback)
             decision_brief = payload.get("decision_brief", decision_brief)
+            decision_trace = payload.get("decision_trace", decision_trace)
             solver = payload.get("solver", solver)
             agent = payload.get("agent", agent)
+            reviewer = payload.get("reviewer", reviewer)
         return {
             **jsonable(run), "state": state, "revision": len(events),
             "analysis": analysis, "decision": decision, "execution": execution,
-            "feedback": feedback, "decision_brief": decision_brief,
-            "solver": solver, "agent": agent,
+            "action_intent": action_intent,
+            "execution_receipt": execution_receipt,
+            "feedback": feedback, "outcome_feedback": outcome_feedback,
+            "decision_brief": decision_brief, "decision_trace": decision_trace,
+            "solver": solver, "agent": agent, "reviewer": reviewer,
             "input_manifest": jsonable(input_manifest),
         }
 

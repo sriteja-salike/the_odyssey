@@ -131,6 +131,7 @@ def project_category(
             lot.usable_lb -= take
             remaining -= take
             if lot.lot_id in tracked:
+                assert lot_stats is not None
                 lot_stats[lot.lot_id]["distributed"] += take
 
         spoilage = ZERO
@@ -138,6 +139,7 @@ def project_category(
             if lot.expiry_idx == t and lot.usable_lb > ZERO:
                 spoilage += lot.usable_lb
                 if lot.lot_id in tracked:
+                    assert lot_stats is not None
                     lot_stats[lot.lot_id]["spoiled"] += lot.usable_lb
                 lot.usable_lb = ZERO
         lots = [lot for lot in lots if lot.usable_lb > ZERO]
