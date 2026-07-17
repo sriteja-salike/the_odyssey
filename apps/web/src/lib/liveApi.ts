@@ -182,7 +182,13 @@ export async function getWorkItems(): Promise<WorkItem[]> {
 }
 
 export async function startWorkItem(item: WorkItem): Promise<LiveRun> {
-  const draft = await createCaseRun(item.case_key);
+  return startCase(item.case_key);
+}
+
+/** Open a scenario directly by case key (e.g. "scenario_a"): create the run,
+    evaluate it, and remember it as the most recent run. */
+export async function startCase(caseKey: string): Promise<LiveRun> {
+  const draft = await createCaseRun(caseKey);
   const evaluated = await evaluateRun(draft.run_id);
   sessionStorage.setItem("nourishops:last-run", evaluated.run_id);
   return evaluated;

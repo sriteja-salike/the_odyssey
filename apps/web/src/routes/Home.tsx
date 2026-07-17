@@ -9,6 +9,7 @@ const EXAMPLE_PROMPTS = [
   "What needs my attention first?",
   "Are any deliveries at risk?",
   "Show inventory concerns",
+  "What are the expected shipments?",
 ];
 
 export default function Home() {
@@ -76,6 +77,12 @@ export default function Home() {
               id="operations-prompt"
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  ask(prompt);
+                }
+              }}
               placeholder="Describe an issue or ask about operations"
               rows={2}
             />
@@ -123,8 +130,14 @@ export default function Home() {
           )}
           {items.length > 1 && (
             <button type="button" className="briefing-next" onClick={continueBriefing}>
-              <ArrowRight size={18} aria-hidden />
-              <span><strong>Continue to next item</strong><small>{items[(activeIndex + 1) % items.length]?.presentation.issue.title}</small></span>
+              <span className="briefing-next__body">
+                <span className="briefing-next__label">Continue to next item</span>
+                <span className="briefing-next__title">
+                  Next up: {items[(activeIndex + 1) % items.length]?.presentation.issue.title}
+                </span>
+              </span>
+              <span className="briefing-next__meta">{((activeIndex + 1) % items.length) + 1} of {items.length}</span>
+              <span className="briefing-next__icon" aria-hidden><ArrowRight size={18} /></span>
             </button>
           )}
         </section>

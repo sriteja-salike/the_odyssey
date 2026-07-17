@@ -9,15 +9,14 @@ import {
   HeaderNavigation,
   OverflowMenu,
   OverflowMenuItem,
-  Select,
-  SelectItem,
   Tag,
 } from "@carbon/react";
 import { Information, OverflowMenuVertical, WarningAlt } from "@carbon/icons-react";
-import { SCENARIOS, getOverlay, type ScenarioLetter } from "../lib/api";
+import { getOverlay, type ScenarioLetter } from "../lib/api";
 import { createRun, getConnectionMode, subscribeConnectivity } from "../lib/liveApi";
 import { date } from "../lib/format";
 import Dialog from "./Dialog";
+import ScenarioMenu from "./ScenarioMenu";
 
 const SIM_NOTICE =
   "Simulation only — All organizations, records, quantities, costs, and outcomes in this prototype are synthetic.";
@@ -34,8 +33,6 @@ export default function AppFrame({ runId, letter, active, onStartClean, children
   const navigate = useNavigate();
   const overlay = getOverlay(letter);
   const [resetOpen, setResetOpen] = useState(false);
-  const [scenarioOpen, setScenarioOpen] = useState(false);
-  const [pendingScenario, setPendingScenario] = useState<ScenarioLetter>(letter);
   const [working, setWorking] = useState(false);
   const connectionMode = useSyncExternalStore(subscribeConnectivity, getConnectionMode, getConnectionMode);
   const offline = connectionMode === "OFFLINE_DEMO";
@@ -58,17 +55,6 @@ export default function AppFrame({ runId, letter, active, onStartClean, children
     }
   }
 
-  async function switchScenario() {
-    setWorking(true);
-    try {
-      const run = await createRun(pendingScenario, runId);
-      setScenarioOpen(false);
-      navigate(`/runs/${run.run_id}`);
-    } finally {
-      setWorking(false);
-    }
-  }
-
   return (
     <div className="app-shell">
       <Header aria-label="ShareStack" className="app-header">
@@ -86,16 +72,13 @@ export default function AppFrame({ runId, letter, active, onStartClean, children
           </HeaderMenu>
         </HeaderNavigation>
         <HeaderGlobalBar>
+          <ScenarioMenu className="scenario-menu--header" />
           <OverflowMenu
             aria-label="Decision options"
             renderIcon={OverflowMenuVertical}
             flipped
             className="header-overflow"
           >
-            <OverflowMenuItem itemText="Open demo fixture" onClick={() => {
-              setPendingScenario(letter);
-              setScenarioOpen(true);
-            }} />
             <OverflowMenuItem itemText="Start clean run" onClick={() => setResetOpen(true)} />
           </OverflowMenu>
         </HeaderGlobalBar>
@@ -106,7 +89,6 @@ export default function AppFrame({ runId, letter, active, onStartClean, children
         <NavLink to={`/runs/${runId}`} end>Decision</NavLink>
         {letter === "A" && <NavLink className="mobile-compare-link" to={`/runs/${runId}/compare`}>Compare</NavLink>}
         <NavLink to={`/runs/${runId}/audit`}>Audit</NavLink>
-        <button type="button" onClick={() => setScenarioOpen(true)}>Demo fixture</button>
       </nav>
 
       <div className="simulation-note" role="note">
@@ -135,26 +117,6 @@ export default function AppFrame({ runId, letter, active, onStartClean, children
           onClose={() => setResetOpen(false)}
         >
           <p>Start again from the original synthetic fixture. This run and its complete audit record will remain unchanged.</p>
-        </Dialog>
-      )}
-
-      {scenarioOpen && (
-        <Dialog
-          title="Open another demo fixture?"
-          primaryLabel={working ? "Opening…" : "Create demo run"}
-          primaryDisabled={working || pendingScenario === letter}
-          onPrimary={() => void switchScenario()}
-          onClose={() => setScenarioOpen(false)}
-        >
-          <p>This developer control opens a frozen regression fixture. In normal use, employees start from Home and the system matches the situation automatically.</p>
-          <Select
-            id="scenario-switcher"
-            labelText="Scenario"
-            value={pendingScenario}
-            onChange={(event) => setPendingScenario(event.target.value as ScenarioLetter)}
-          >
-            {SCENARIOS.map((scenario) => <SelectItem key={scenario.letter} value={scenario.letter} text={scenario.label} />)}
-          </Select>
         </Dialog>
       )}
     </div>
