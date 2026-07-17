@@ -377,6 +377,11 @@ class PostgresStore:
             raise RuntimeError(f"Run input documents missing: {', '.join(missing)}")
         return run, documents
 
+    def run_documents(self, run_id: str, connection=None) -> dict[str, str]:
+        """Return the sealed source documents for deriving an audited child run."""
+        _, documents = self._run_documents(run_id, connection)
+        return documents
+
     def knowledge_summary(self, scenario_key: str) -> dict[str, Any]:
         names = self._scenario_names(scenario_key)
         placeholders = ",".join(["%s"] * len(names))
@@ -414,7 +419,14 @@ class PostgresStore:
             "simulation": [row for row in sources if row["source_kind"] == "SIMULATION_CONTROL"],
         }
 
-    def create_run(self, scenario_key: str, parent_run_id: str | None, connection=None) -> str:
+    def create_run(
+        self,
+        scenario_key: str,
+        parent_run_id: str | None,
+        connection=None,
+        document_overrides: dict[str, str] | None = None,
+        creation_event: dict[str, Any] | None = None,
+    ) -> str:
         slug = scenario_key.removeprefix("scenario_").replace("_", "-")[:24]
         run_id = f"run_scn-{slug}_{uuid4().hex[:8]}"
         now = utcnow()
@@ -422,9 +434,26 @@ class PostgresStore:
             package = self.scenario_registry.get(scenario_key)
             self._require_supported_normalizer(package)
             names = self._scenario_names(scenario_key)
-            rows = self._latest_document_rows(
-                active, names, self._expected_sources(package, scenario_key),
-            )
+            rows = [
+                dict(row)
+                for row in self._latest_document_rows(
+                    active, names, self._expected_sources(package, scenario_key),
+                )
+            ]
+            if document_overrides:
+                rows_by_name = {row["document_id"]: row for row in rows}
+                unknown = sorted(set(document_overrides) - rows_by_name.keys())
+                if unknown:
+                    raise ValueError(
+                        "Run input overrides reference unknown documents: "
+                        + ", ".join(unknown)
+                    )
+                for document_id, payload_text in document_overrides.items():
+                    row = rows_by_name[document_id]
+                    row["payload_text"] = payload_text
+                    row["payload_sha256"] = hashlib.sha256(payload_text.encode()).hexdigest()
+                    row["source_version"] = f"synthetic-correction/{uuid4().hex}"
+                    row["observed_at_utc"] = now
             documents = {row["document_id"]: row["payload_text"] for row in rows}
             missing = sorted(set(names) - documents.keys())
             if missing:
@@ -505,6 +534,15 @@ class PostgresStore:
                 "scenario_package_version": package.package_version,
                 "document_count": len(manifest),
             }, now)
+            if creation_event:
+                self._append_event(
+                    active,
+                    run_id,
+                    "BLOCKER_RESOLUTION_CONFIRMED",
+                    "MANAGER_UI",
+                    {"state": "DRAFT", **creation_event},
+                    now,
+                )
         return run_id
 
     def append_event(

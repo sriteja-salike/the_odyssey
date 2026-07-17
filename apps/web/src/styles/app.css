@@ -747,6 +747,25 @@ h2.sec, h3.sec { margin-bottom: var(--s4); }
 
 .service-error { max-width: 1040px; margin: 0 auto var(--s4); padding: var(--s3) var(--s4); color: var(--breach); background: var(--breach-tint); border-radius: 8px; }
 .decision-modal__body { color: var(--sub); line-height: 1.55; }
+.resolution-options { display: grid; gap: var(--s2); margin-top: var(--s2); }
+.resolution-options legend { margin-bottom: var(--s2); color: var(--ink); font-weight: 600; }
+.resolution-options .cds--radio-button-wrapper {
+  min-height: 60px;
+  align-items: flex-start;
+  padding: 11px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.resolution-options .cds--radio-button-wrapper:has(input:checked) {
+  background: var(--action-tint);
+  border-color: var(--action);
+}
+.resolution-options .cds--radio-button__label { align-items: flex-start; }
+.resolution-options .cds--radio-button__label-text strong,
+.resolution-options .cds--radio-button__label-text small { display: block; }
+.resolution-options .cds--radio-button__label-text strong { color: var(--ink); }
+.resolution-options .cds--radio-button__label-text small { margin-top: 2px; color: var(--quiet); font-size: 12px; }
 .confirmation-facts { margin-top: var(--s5); }
 .cds--modal-container { border-radius: 12px; overflow: hidden; }
 

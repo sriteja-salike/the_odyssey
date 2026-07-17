@@ -99,12 +99,44 @@ describe("core decision flow", () => {
     expect((await runAxe(container)).violations).toEqual([]);
   });
 
+  it("asks for feedback only once after an approved action", () => {
+    const run = oEvaluateRun(oCreateRun("A").run_id);
+    const recommendation = run.decision_brief!.recommendation!.action;
+    render(
+      <MemoryRouter>
+        <ResultWorkspace
+          letter="A"
+          runId={run.run_id}
+          decision={{ kind: "approve", actionId: recommendation.action_id, quantityLb: recommendation.requested_quantity_lb }}
+          feedbackRecorded={false}
+          outcomeRecorded
+          brief={run.decision_brief!}
+          onReset={() => undefined}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Outcome recorded. Thank you.")).toBeInTheDocument();
+    expect(screen.queryByText("Give feedback on this recommendation")).not.toBeInTheDocument();
+    expect(screen.queryByText("Was this recommendation useful?")).not.toBeInTheDocument();
+  });
+
   it("blocks Scenario E and renders no approval control", async () => {
     const run = oEvaluateRun(oCreateRun("E").run_id);
-    const { container } = render(<MemoryRouter><SafeStop status="ABSTAINED" brief={run.decision_brief!} onStartClean={() => undefined} /></MemoryRouter>);
+    const onResolve = vi.fn().mockResolvedValue(undefined);
+    const { container } = render(<MemoryRouter><SafeStop status="ABSTAINED" brief={run.decision_brief!} onStartClean={() => undefined} onResolve={onResolve} /></MemoryRouter>);
     expect(screen.getByRole("heading", { name: "Choose a response" })).toBeInTheDocument();
     expect(screen.getByText("Blocked")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /approve/i })).not.toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Resolve record conflict" }));
+    const dialog = screen.getByRole("dialog", { name: "Resolve the record conflict" });
+    const submit = within(dialog).getByRole("button", { name: "Confirm and run check again" });
+    expect(submit).toBeDisabled();
+    await userEvent.setup().click(within(dialog).getByRole("radio", { name: /Planned inbound ledger/ }));
+    await userEvent.setup().click(within(dialog).getByRole("checkbox", { name: /I verified this source/ }));
+    expect(submit).toBeEnabled();
+    await userEvent.setup().click(submit);
+    expect(onResolve).toHaveBeenCalledWith("INBOUND_LEDGER");
     expect((await runAxe(container)).violations).toEqual([]);
   });
 });

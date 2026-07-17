@@ -60,6 +60,14 @@ class ActionPreviewRequest(BaseModel):
     quantity_lb: int = Field(ge=0)
 
 
+class BlockerResolutionRequest(BaseModel):
+    authoritative_source: Literal[
+        "INBOUND_LEDGER",
+        "USDA_NOTICE",
+        "RECEIVING_NOTE",
+    ]
+
+
 class FeedbackRequest(BaseModel):
     rating: Literal["HELPFUL", "NOT_HELPFUL"]
     reason: str | None = Field(default=None, max_length=500)

@@ -11,7 +11,17 @@ import Dialog from "../components/Dialog";
 import NotFoundRun from "./NotFoundRun";
 import { letterFromRunId } from "../lib/run";
 import { useRunState, type Decision } from "../lib/runState";
-import { createRun, decideRun, evaluateRun, getRun, getWorkItems, type LiveRun, type WorkItem } from "../lib/liveApi";
+import {
+  createRun,
+  decideRun,
+  evaluateRun,
+  getRun,
+  getWorkItems,
+  resolveRunBlocker,
+  type BlockerResolutionSource,
+  type LiveRun,
+  type WorkItem,
+} from "../lib/liveApi";
 
 export default function DecisionWorkspace() {
   const { runId = "" } = useParams();
@@ -83,6 +93,11 @@ export default function DecisionWorkspace() {
     navigate(`/runs/${run.run_id}`);
   }
 
+  async function resolveBlocker(source: BlockerResolutionSource) {
+    const run = await resolveRunBlocker(runId, source);
+    navigate(`/runs/${run.run_id}`);
+  }
+
   if (!letter) return <NotFoundRun />;
   if (!liveRun && !error) return <main className="bootstrap-screen"><InlineLoading description="Loading the saved decision…" /></main>;
   if (!liveRun && error) return <NotFoundRun />;
@@ -111,6 +126,7 @@ export default function DecisionWorkspace() {
           brief={liveRun?.decision_brief ?? undefined}
           onStartClean={() => setConfirmReset(true)}
           onRetry={state.phase === "FAILED" || state.phase === "STALE" ? startAnalysis : undefined}
+          onResolve={state.phase === "ABSTAINED" ? resolveBlocker : undefined}
         />
       )}
       {(state.phase === "APPROVED" || state.phase === "REJECTED" || state.phase === "DEFERRED") && state.decision && (

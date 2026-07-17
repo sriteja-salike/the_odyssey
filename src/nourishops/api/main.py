@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 
 from nourishops.api.models import (
     ActionPreviewRequest,
+    BlockerResolutionRequest,
     CreateRunRequest,
     DecisionBriefEnvelope,
     DecisionRequest,
@@ -194,6 +195,24 @@ def evaluate(run_id: str, idempotency_key: IdempotencyKey):
         idempotency_key,
         {},
         lambda connection: envelope(service.evaluate(run_id, connection)),
+    )
+
+
+@app.post("/api/v1/runs/{run_id}/resolve-blocker", status_code=201)
+def resolve_blocker(
+    run_id: str,
+    request: BlockerResolutionRequest,
+    idempotency_key: IdempotencyKey,
+):
+    return idempotent(
+        f"POST /api/v1/runs/{run_id}/resolve-blocker",
+        idempotency_key,
+        request.model_dump(mode="json"),
+        lambda connection: envelope(service.resolve_blocker(
+            run_id,
+            request.authoritative_source,
+            connection,
+        )),
     )
 
 

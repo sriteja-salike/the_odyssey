@@ -1,6 +1,7 @@
 """Scenario run use cases coordinating sources, engine, audit, and execution."""
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from decimal import Decimal
 from time import perf_counter_ns
@@ -32,6 +33,50 @@ from nourishops.application.execution import (
 )
 from nourishops.application.presentation import WorkItem, build_work_item
 from nourishops.persistence.postgres import PostgresStore, jsonable, sha256
+
+
+BLOCKER_RESOLUTIONS: dict[str, dict[str, Any]] = {
+    "INBOUND_LEDGER": {
+        "label": "Planned inbound ledger",
+        "expected_week_start": "2026-08-03",
+        "status": "CONFIRMED",
+        "arrival_probability": 1.0,
+        "gross_quantity_lb": 10000,
+        "evidence_id": "EVD-BASE-INBOUND-LEDGER",
+    },
+    "USDA_NOTICE": {
+        "label": "USDA shipment notice",
+        "expected_week_start": "2026-08-17",
+        "status": "PROBABLE",
+        "arrival_probability": 0.65,
+        "gross_quantity_lb": 10000,
+        "evidence_id": "EVD-E-USDA-NOTICE",
+    },
+    "RECEIVING_NOTE": {
+        "label": "Receiving team note",
+        "expected_week_start": "2026-08-10",
+        "status": "PROBABLE",
+        "arrival_probability": 0.65,
+        "gross_quantity_lb": 6000,
+        "evidence_id": "EVD-E-RECEIVING-NOTE",
+    },
+}
+
+RESOLUTION_ACTION_IDS = [
+    "ACT-A-PURCHASE-PROTEIN-15000",
+    "ACT-A-TRANSFER-PROTEIN-8000",
+    "ACT-A-DONOR-REQUEST-PROTEIN-15000",
+    "ACT-A-PURCHASE-PROTEIN-25000",
+    "ACT-A-PURCHASE-PROTEIN-LATE-15000",
+]
+
+RESOLUTION_ACTION_EVIDENCE_IDS = [
+    "EVD-A-VENDOR-STANDARD",
+    "EVD-A-PEER-TRANSFER",
+    "EVD-A-DONOR-ASSUMPTION",
+    "EVD-A-VENDOR-OVERSIZED",
+    "EVD-A-VENDOR-LATE",
+]
 
 
 def _natural_list(values: list[str]) -> str:
@@ -586,6 +631,71 @@ class NourishOpsService:
             "trace": [stage.stage for stage in trace_stages],
         }, connection)
         return self.get_run(run_id, connection)
+
+    def resolve_blocker(
+        self,
+        run_id: str,
+        authoritative_source: str,
+        connection=None,
+    ) -> dict:
+        """Create and evaluate an immutable child run with staff-confirmed facts."""
+        if connection is None:
+            with self.store.connect() as owned:
+                return self.resolve_blocker(run_id, authoritative_source, owned)
+        self.store.lock_run(connection, run_id)
+        parent = self.get_run(run_id, connection)
+        if parent["scenario_key"] != "scenario_e" or parent["state"] != "ABSTAINED":
+            raise ApplicationError(
+                "BLOCKER_NOT_RESOLVABLE",
+                "Only a safely stopped record-conflict run can be resolved here.",
+                409,
+            )
+        resolution = BLOCKER_RESOLUTIONS.get(authoritative_source)
+        if resolution is None:
+            raise ApplicationError(
+                "INVALID_AUTHORITATIVE_SOURCE",
+                "Choose one of the records shown in the conflict review.",
+            )
+
+        documents = self.store.run_documents(run_id, connection)
+        overlay_name = f"scenarios/{parent['scenario_key']}.json"
+        overlay = json.loads(documents[overlay_name])
+        overlay["overlay"]["inbound_mutations"] = [{
+            "inbound_id": "INB-USDA-PROTEIN-104",
+            "set": {
+                "expected_week_start": resolution["expected_week_start"],
+                "status": resolution["status"],
+                "arrival_probability": resolution["arrival_probability"],
+                "gross_quantity_lb": resolution["gross_quantity_lb"],
+            },
+        }]
+        overlay["enabled_action_ids"] = RESOLUTION_ACTION_IDS
+        overlay["active_evidence_ids"] = [
+            resolution["evidence_id"],
+            *RESOLUTION_ACTION_EVIDENCE_IDS,
+        ]
+        corrected_overlay = json.dumps(
+            jsonable(overlay),
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        child_id = self.store.create_run(
+            parent["scenario_key"],
+            run_id,
+            connection,
+            document_overrides={overlay_name: corrected_overlay},
+            creation_event={
+                "parent_run_id": run_id,
+                "authoritative_source": authoritative_source,
+                "authoritative_source_label": resolution["label"],
+                "confirmed_values": {
+                    "expected_week_start": resolution["expected_week_start"],
+                    "status": resolution["status"],
+                    "gross_quantity_lb": resolution["gross_quantity_lb"],
+                },
+            },
+        )
+        return self.evaluate(child_id, connection)
 
     def decide(self, run_id: str, kind: str, action_id: str, quantity_lb: int,
                reason: str | None, expected_revision: int | None = None,

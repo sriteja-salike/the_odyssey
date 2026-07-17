@@ -37,6 +37,7 @@ interface OfflineRecord {
   parent_run_id: string | null;
   feedback: Record<string, unknown> | null;
   outcome_feedback: Record<string, unknown> | null;
+  resolved_source?: string;
 }
 
 function readRecord(runId: string): OfflineRecord {
@@ -235,14 +236,14 @@ function buildBrief(letter: ScenarioLetter, runId: string): DecisionBrief {
   };
 }
 
-function buildTrace(letter: ScenarioLetter, runId: string): DecisionTrace {
+function buildTrace(letter: ScenarioLetter, runId: string, resolved = false): DecisionTrace {
   const status = getGolden(letter).decision_status;
   return {
     schema_version: "decision-trace/1.0.0",
     trace_id: `TRC-${letter}OFFLINE`,
     run_id: runId,
     exposes_chain_of_thought: false,
-    final_status: status === "ABSTAINED" ? "ABSTAINED" : "PASSED",
+    final_status: resolved ? "PASSED" : status === "ABSTAINED" ? "ABSTAINED" : "PASSED",
     stages: [
       stage("CONTEXT_FROZEN", "CONTEXT_LAYER", "PASSED", "The operational information available when this review began was saved and checked."),
       stage("DETERMINISTIC_SOLVER", "SOLVER", "PASSED", "ShareStack compared the available responses against inventory, capacity, budget, and timing limits.", { solver_id: SOLVER.solver_id }),
@@ -348,6 +349,22 @@ function buildRun(letter: ScenarioLetter, runId: string): LiveRun {
   const state = storedState.phase === "ANALYZING" ? "DRAFT" : storedState.phase;
   const analyzed = state !== "DRAFT";
   const records = readRecord(runId);
+  const resolved = Boolean(records.resolved_source);
+  const analysis = resolved
+    ? { ...golden, decision_status: "NO_ACTION_REQUIRED", risks: [], blocking_issues: [] }
+    : golden;
+  const brief = buildBrief(letter, runId);
+  const decisionBrief = resolved ? {
+    ...brief,
+    decision_status: "NO_ACTION_REQUIRED",
+    status_message: "The confirmed record cleared the conflict and no response is required.",
+    primary_risk: null,
+    recommendation: null,
+    rationale: null,
+    alternatives: [],
+    rejected_options: [],
+    blocking_issues: [],
+  } : brief;
   const execution = buildExecution(letter, runId, storedState);
   const decision: LiveDecision | null = storedState.decision ? {
     decision_id: `DEC-${letter}OFFLINE`,
@@ -367,15 +384,15 @@ function buildRun(letter: ScenarioLetter, runId: string): LiveRun {
     created_at_utc: golden.fixed_clock_utc,
     state,
     revision: events.length,
-    analysis: analyzed ? (golden as unknown as Record<string, unknown>) : null,
-    decision_brief: analyzed ? buildBrief(letter, runId) : null,
+    analysis: analyzed ? (analysis as unknown as Record<string, unknown>) : null,
+    decision_brief: analyzed ? decisionBrief : null,
     decision,
     execution: execution.receipt,
     action_intent: execution.intent,
     execution_receipt: execution.receipt,
     feedback: records.feedback,
     outcome_feedback: records.outcome_feedback,
-    decision_trace: analyzed ? buildTrace(letter, runId) : null,
+    decision_trace: analyzed ? buildTrace(letter, runId, resolved) : null,
     solver: analyzed ? SOLVER : null,
     agent: analyzed ? agent("DECISION_ORCHESTRATOR") : null,
     reviewer: analyzed ? agent("INDEPENDENT_REVIEWER") : null,
@@ -404,6 +421,17 @@ export function oEvaluateRun(runId: string): LiveRun {
   const status = getGolden(letter).decision_status;
   setRunState(runId, { phase: status === "ABSTAINED" ? "ABSTAINED" : "READY_FOR_REVIEW" });
   return buildRun(letter, runId);
+}
+
+export function oResolveBlocker(runId: string, authoritativeSource: string): LiveRun {
+  if (authoritativeSource !== "INBOUND_LEDGER") {
+    throw new Error("Reconnect to recheck a delayed or reduced shipment safely.");
+  }
+  const child = oCreateRun("E", runId);
+  const record = readRecord(child.run_id);
+  writeRecord(child.run_id, { ...record, resolved_source: authoritativeSource });
+  setRunState(child.run_id, { phase: "NO_ACTION_REQUIRED" });
+  return buildRun("E", child.run_id);
 }
 
 export function oDecideRun(runId: string, decision: Decision): LiveRun {
@@ -497,6 +525,11 @@ function buildEvents(
     });
   };
   push("RUN_CREATED", "SYSTEM", { state: "DRAFT", scenario_id: golden.scenario_id });
+  if (records.resolved_source) {
+    push("BLOCKER_RESOLUTION_CONFIRMED", "MANAGER_UI", {
+      authoritative_source: records.resolved_source,
+    });
+  }
   const analyzed = state.phase !== "DRAFT" && state.phase !== "ANALYZING";
   if (analyzed) {
     for (const item of golden.audit_oracle) {
@@ -504,8 +537,15 @@ function buildEvents(
       if (item.event_type.startsWith("RECOMMENDATION_")) continue;
       push(item.event_type, "SYSTEM", { semantic_id: item.semantic_id });
     }
-    push("DECISION_TRACE_RECORDED", "SYSTEM", { decision_trace: buildTrace(letter, runId) });
-    push(golden.decision_status === "ABSTAINED" ? "RECOMMENDATION_ABSTAINED" : "RECOMMENDATION_PREPARED", "SYSTEM", {
+    push("DECISION_TRACE_RECORDED", "SYSTEM", {
+      decision_trace: buildTrace(letter, runId, Boolean(records.resolved_source)),
+    });
+    const resultEvent = records.resolved_source
+      ? "NO_ACTION_REQUIRED"
+      : golden.decision_status === "ABSTAINED"
+        ? "RECOMMENDATION_ABSTAINED"
+        : "RECOMMENDATION_PREPARED";
+    push(resultEvent, "SYSTEM", {
       recommendation_id: golden.recommended_action?.recommendation_id ?? null,
     });
   }

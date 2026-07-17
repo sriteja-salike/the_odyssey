@@ -13,6 +13,7 @@ import {
   oEvaluateRun,
   oGetEvents,
   oGetRun,
+  oResolveBlocker,
   oSubmitFeedback,
   oSubmitOutcomeFeedback,
 } from "./offlineApi";
@@ -282,6 +283,29 @@ export async function evaluateRun(runId: string): Promise<LiveRun> {
     if (!(error instanceof OfflineError)) throw error;
     markOffline();
     return rememberRun(oEvaluateRun(runId));
+  }
+}
+
+export type BlockerResolutionSource =
+  | "INBOUND_LEDGER"
+  | "USDA_NOTICE"
+  | "RECEIVING_NOTE";
+
+export async function resolveRunBlocker(
+  runId: string,
+  authoritativeSource: BlockerResolutionSource,
+): Promise<LiveRun> {
+  if (OFFLINE) return rememberRun(oResolveBlocker(runId, authoritativeSource));
+  try {
+    return rememberRun(await request<LiveRun>(`/runs/${runId}/resolve-blocker`, {
+      method: "POST",
+      headers: idempotencyHeaders(),
+      body: JSON.stringify({ authoritative_source: authoritativeSource }),
+    }, 15_000));
+  } catch (error) {
+    if (!(error instanceof OfflineError)) throw error;
+    markOffline();
+    return rememberRun(oResolveBlocker(runId, authoritativeSource));
   }
 }
 

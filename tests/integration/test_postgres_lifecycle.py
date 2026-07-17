@@ -362,6 +362,32 @@ def test_abstention_never_invokes_the_agent() -> None:
 
 
 @pytest.mark.skipif(not DATABASE_URL, reason="set NOURISHOPS_TEST_DATABASE_URL for PostgreSQL integration")
+def test_staff_can_resolve_abstention_into_an_audited_child_run() -> None:
+    store = PostgresStore(DATABASE_URL)
+    store.migrate()
+    store.seed_integrations()
+    service = NourishOpsService(store)
+
+    parent = service.evaluate(service.create_run("scenario_e")["run_id"])
+    resolved = service.resolve_blocker(parent["run_id"], "USDA_NOTICE")
+
+    assert service.get_run(parent["run_id"])["state"] == "ABSTAINED"
+    assert resolved["parent_run_id"] == parent["run_id"]
+    assert resolved["state"] == "READY_FOR_REVIEW"
+    assert resolved["decision_brief"]["recommendation"] is not None
+    assert not [
+        issue for issue in resolved["analysis"]["blocking_issues"]
+        if issue["severity"] == "ERROR"
+    ]
+    events = store.get_events(resolved["run_id"])
+    correction = next(
+        event for event in events
+        if event["event_type"] == "BLOCKER_RESOLUTION_CONFIRMED"
+    )
+    assert correction["payload"]["authoritative_source"] == "USDA_NOTICE"
+
+
+@pytest.mark.skipif(not DATABASE_URL, reason="set NOURISHOPS_TEST_DATABASE_URL for PostgreSQL integration")
 def test_action_loop_records_are_immutable_and_outcome_requires_a_receipt() -> None:
     store = PostgresStore(DATABASE_URL)
     store.migrate()

@@ -1,9 +1,12 @@
-import { Button, Tag } from "@carbon/react";
+import { useState } from "react";
+import { Button, Checkbox, RadioButton, RadioButtonGroup, Tag } from "@carbon/react";
 import { Link } from "react-router-dom";
 import { CheckmarkFilled, Locked, Renew, WarningAlt } from "@carbon/icons-react";
 import type { DecisionBrief } from "../lib/liveApi";
+import type { BlockerResolutionSource } from "../lib/liveApi";
 import type { DecisionStatus } from "../types/golden";
 import DecisionVisual from "./DecisionVisual";
+import Dialog from "./Dialog";
 
 const HEADLINE: Partial<Record<DecisionStatus, string>> = {
   ABSTAINED: "A safe recommendation cannot be produced from the current data.",
@@ -17,14 +20,33 @@ export default function SafeStop({
   brief,
   onStartClean,
   onRetry,
+  onResolve,
 }: {
   status: DecisionStatus;
   brief?: DecisionBrief;
   onStartClean: () => void;
   onRetry?: () => void;
+  onResolve?: (source: BlockerResolutionSource) => Promise<void>;
 }) {
   const abstained = status === "ABSTAINED";
   const healthy = status === "NO_ACTION_REQUIRED";
+  const [resolutionOpen, setResolutionOpen] = useState(false);
+  const [source, setSource] = useState<BlockerResolutionSource | "">("");
+  const [confirmed, setConfirmed] = useState(false);
+  const [resolving, setResolving] = useState(false);
+  const [resolutionError, setResolutionError] = useState("");
+
+  async function resolve() {
+    if (!source || !confirmed || !onResolve) return;
+    setResolving(true);
+    setResolutionError("");
+    try {
+      await onResolve(source);
+    } catch (cause) {
+      setResolutionError((cause as Error).message);
+      setResolving(false);
+    }
+  }
 
   return (
     <div className="journey-shell safe-journey">
@@ -73,12 +95,56 @@ export default function SafeStop({
       </section>}
 
       <div className="safe-actions">
-        {abstained && <Button as={Link} to="/assistant?prompt=What%20needs%20to%20be%20corrected%20in%20these%20conflicting%20records%3F">Ask agent how to resolve this</Button>}
+        {abstained && onResolve && <Button onClick={() => setResolutionOpen(true)}>Resolve record conflict</Button>}
+        {abstained && <Button as={Link} kind="tertiary" to="/assistant?prompt=What%20needs%20to%20be%20corrected%20in%20these%20conflicting%20records%3F">Ask agent for help</Button>}
         {onRetry && <Button renderIcon={Renew} onClick={onRetry}>Run the check again</Button>}
         <Button as={Link} kind="tertiary" to="/">Return to Today</Button>
         <Button kind="ghost" onClick={onStartClean}>Start clean run</Button>
       </div>
       <p className="journey-reassurance"><Locked size={16} aria-hidden /> No external action was taken.</p>
+
+      {resolutionOpen && onResolve && (
+        <Dialog
+          title="Resolve the record conflict"
+          primaryLabel={resolving ? "Checking corrected records…" : "Confirm and run check again"}
+          primaryDisabled={!source || !confirmed || resolving}
+          onPrimary={() => void resolve()}
+          onClose={() => setResolutionOpen(false)}
+        >
+          <p>Select the source you verified. ShareStack will preserve this stopped run, create a corrected child run, and check the decision again.</p>
+          <RadioButtonGroup
+            className="resolution-options"
+            legendText="Which source is authoritative?"
+            name="authoritative-source"
+            orientation="vertical"
+            valueSelected={source}
+            onChange={(value) => setSource(value as BlockerResolutionSource)}
+          >
+            <RadioButton
+              id="source-inbound-ledger"
+              value="INBOUND_LEDGER"
+              labelText={<span><strong>Planned inbound ledger</strong><small>Aug 3 · 10,000 lb · Confirmed · Structured source</small></span>}
+            />
+            <RadioButton
+              id="source-usda-notice"
+              value="USDA_NOTICE"
+              labelText={<span><strong>USDA shipment notice</strong><small>Aug 17 · 10,000 lb · Treat as probable</small></span>}
+            />
+            <RadioButton
+              id="source-receiving-note"
+              value="RECEIVING_NOTE"
+              labelText={<span><strong>Receiving team note</strong><small>Aug 10 · 6,000 lb · Treat as probable</small></span>}
+            />
+          </RadioButtonGroup>
+          <Checkbox
+            id="confirm-authoritative-source"
+            checked={confirmed}
+            labelText="I verified this source and confirm these values should be used for this decision."
+            onChange={(_, data) => setConfirmed(data.checked)}
+          />
+          {resolutionError && <p className="field__err" role="alert">{resolutionError}</p>}
+        </Dialog>
+      )}
     </div>
   );
 }

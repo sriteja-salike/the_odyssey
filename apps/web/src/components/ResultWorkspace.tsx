@@ -30,7 +30,7 @@ export default function ResultWorkspace(props: Props) {
   return <ApprovedResult {...props} />;
 }
 
-function ApprovedResult({ letter, runId, decision, execution, feedbackRecorded, outcomeRecorded, brief, onReset }: Props) {
+function ApprovedResult({ letter, runId, decision, execution, outcomeRecorded, brief, onReset }: Props) {
   const action = [brief?.recommendation?.action, ...(brief?.alternatives ?? [])]
     .find((item) => item?.action_id === decision.actionId) ?? brief?.recommendation?.action;
 
@@ -60,11 +60,6 @@ function ApprovedResult({ letter, runId, decision, execution, feedbackRecorded, 
       </ol>
 
       <OutcomeFeedback runId={runId} recorded={outcomeRecorded} />
-
-      <details className="plain-disclosure recommendation-feedback-disclosure">
-        <summary>Give feedback on this recommendation</summary>
-        <RecommendationFeedback runId={runId} recorded={feedbackRecorded} />
-      </details>
 
       <details className="plain-disclosure">
         <summary>Decision details</summary>
