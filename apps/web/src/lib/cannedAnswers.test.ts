@@ -21,7 +21,7 @@ describe("scripted demo answers", () => {
     const first = getCannedAnswer("What needs my attention first?");
     const followUp = getCannedAnswer("Why is the protein shortage urgent?");
 
-    expect(first?.answer).toContain("Next question to ask: “Why is the protein shortage urgent?”");
+    expect(first?.answer).not.toContain("Next question to ask");
     expect(first?.answer).toContain("10,000 lb USDA protein shipment");
     expect(followUp?.answer).toContain("purchasing 15,000 lb for $12,750");
     expect(followUp?.answer).toContain("coverage from 1.3 to 3.0 weeks");

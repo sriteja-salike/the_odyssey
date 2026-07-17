@@ -34,8 +34,6 @@ const CANNED: Record<string, { answer: string; suggested?: string[] }> = {
       "A 10,000 lb USDA protein shipment moved from Aug 3 to Aug 17. Without another response, protein coverage falls to 1.3 weeks around Aug 10 — below the 1.5-week safety minimum.",
       "",
       "I checked the current inventory, inbound delivery, distribution history, policy, and available response records. The issue needs review by Aug 10, but no action has been taken.",
-      "",
-      "Next question to ask: “Why is the protein shortage urgent?”",
     ].join("\n"),
     suggested: [
       "Why is the protein shortage urgent?",

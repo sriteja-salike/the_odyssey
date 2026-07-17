@@ -34,6 +34,8 @@ export default function Home() {
   const recent = getRecentRuns();
   const queue = useMemo(() => [...items].sort((a, b) => queueScore(a, recent) - queueScore(b, recent)), [items, recent]);
   const active = queue[0];
+  const activeRun = active ? runFor(active, recent) : undefined;
+  const activeCopy = active ? situationCopy(active, activeRun) : undefined;
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
     return hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
@@ -50,8 +52,9 @@ export default function Home() {
     ask(prompt);
   }
 
-  function askAbout(item: WorkItem, question = item.presentation.suggested_questions[0]) {
-    ask(`${question} ${item.presentation.issue.title}`);
+  function askAbout(item: WorkItem, question?: string) {
+    const selectedQuestion = question ?? situationQuestions(item, runFor(item, recent))[0];
+    ask(`${selectedQuestion} ${situationCopy(item, runFor(item, recent)).title}`);
   }
 
   async function openCurrent(item: WorkItem) {
@@ -123,15 +126,15 @@ export default function Home() {
               <div className="briefing-card__intro">
                 <span className={`briefing-indicator briefing-indicator--${statusTone(active, recent)}`} aria-hidden />
                 <div>
-                  <p>{active.state === "INFORMATION_NEEDED" ? "Resolve this first" : "Highest-priority decision"}</p>
+                  <p>{briefingHeading(active, activeRun)}</p>
                   <small>{queue.length} verified situations in today’s queue · {statusLabel(active, recent)}</small>
                 </div>
               </div>
               <div className="briefing-card__body">
                 <div>
-                  <p className="briefing-kicker">{active.presentation.issue.label}</p>
-                  <h2>{active.presentation.issue.title}</h2>
-                  <p>{active.presentation.issue.summary}</p>
+                  <p className="briefing-kicker">{activeCopy?.label}</p>
+                  <h2>{activeCopy?.title}</h2>
+                  <p>{activeCopy?.summary}</p>
                   <div className="briefing-meta">
                     {active.due_label && <span><Time size={16} aria-hidden />{active.due_label}</span>}
                     <span><CheckmarkFilled size={16} aria-hidden />{active.source_count} verified case records</span>
@@ -142,7 +145,7 @@ export default function Home() {
                 </button>
               </div>
               <div className="briefing-questions">
-                {active.presentation.suggested_questions.slice(0, 2).map((question) => (
+                {situationQuestions(active, activeRun).map((question) => (
                   <button key={question} type="button" onClick={() => askAbout(active, question)}>{question}<ArrowRight size={16} /></button>
                 ))}
               </div>
@@ -150,20 +153,23 @@ export default function Home() {
           )}
           {queue.length > 1 && <div className="scenario-queue" aria-label="All verified situations">
             <div className="scenario-queue__heading"><h2>All situations</h2><span>Ask about any item or open its decision</span></div>
-            {queue.slice(1).map((item) => <article className="scenario-row" key={item.work_item_id}>
-              <span className={`briefing-indicator briefing-indicator--${statusTone(item, recent)}`} aria-hidden />
-              <div className="scenario-row__copy">
-                <span>{item.presentation.issue.label} · {statusLabel(item, recent)}</span>
-                <h3>{item.presentation.issue.title}</h3>
-                <small>{item.due_label ?? `${item.source_count} verified case records`}</small>
-              </div>
-              <div className="scenario-row__actions">
-                <button type="button" onClick={() => askAbout(item)}><Chat size={17} aria-hidden />Ask</button>
-                <button type="button" className="scenario-row__open" onClick={() => void openCurrent(item)} disabled={opening === item.work_item_id}>
-                  {opening === item.work_item_id ? "Opening…" : actionLabel(item, recent)}<ArrowRight size={17} aria-hidden />
-                </button>
-              </div>
-            </article>)}
+            {queue.slice(1).map((item) => {
+              const copy = situationCopy(item, runFor(item, recent));
+              return <article className="scenario-row" key={item.work_item_id}>
+                <span className={`briefing-indicator briefing-indicator--${statusTone(item, recent)}`} aria-hidden />
+                <div className="scenario-row__copy">
+                  <span>{copy.label} · {statusLabel(item, recent)}</span>
+                  <h3>{copy.title}</h3>
+                  <small>{item.due_label ?? `${item.source_count} verified case records`}</small>
+                </div>
+                <div className="scenario-row__actions">
+                  <button type="button" onClick={() => askAbout(item)}><Chat size={17} aria-hidden />Ask</button>
+                  <button type="button" className="scenario-row__open" onClick={() => void openCurrent(item)} disabled={opening === item.work_item_id}>
+                    {opening === item.work_item_id ? "Opening…" : actionLabel(item, recent)}<ArrowRight size={17} aria-hidden />
+                  </button>
+                </div>
+              </article>;
+            })}
           </div>}
         </section>
       </main>
@@ -184,9 +190,70 @@ function statusLabel(item: WorkItem, recent: RecentRun[]) {
 function statusTone(item: WorkItem, recent: RecentRun[]) {
   const state = runFor(item, recent)?.state;
   if (state === "APPROVED" || state === "NO_ACTION_REQUIRED") return "complete";
-  if (state === "ABSTAINED" || state === "FAILED" || state === "STALE" || item.state === "INFORMATION_NEEDED") return "blocked";
+  if (state === "ABSTAINED" || state === "FAILED" || state === "STALE") return "blocked";
   if (state === "DEFERRED" || state === "REJECTED") return "open";
+  if (state) return "ready";
+  if (item.state === "INFORMATION_NEEDED") return "blocked";
   return "ready";
+}
+
+function briefingHeading(item: WorkItem, run: RecentRun | undefined) {
+  if (run?.state === "APPROVED" || run?.state === "NO_ACTION_REQUIRED") return "Recently completed";
+  if (item.state === "INFORMATION_NEEDED" && (!run || run.state === "ABSTAINED")) return "Resolve this first";
+  return "Highest-priority decision";
+}
+
+function situationCopy(item: WorkItem, run: RecentRun | undefined) {
+  const original = item.presentation.issue;
+  if (item.state !== "INFORMATION_NEEDED" || !run || run.state === "ABSTAINED") return original;
+  if (run.state === "APPROVED" || run.state === "NO_ACTION_REQUIRED") {
+    return {
+      label: "Records corrected",
+      title: "The record conflict was resolved.",
+      summary: "The authoritative source was confirmed and the follow-up decision was completed.",
+    };
+  }
+  if (run.state === "READY_FOR_REVIEW") {
+    return {
+      label: "Records corrected",
+      title: "The conflicting records were reconciled.",
+      summary: "The authoritative source was confirmed. A follow-up response is ready for review.",
+    };
+  }
+  if (run.state === "REJECTED" || run.state === "DEFERRED") {
+    return {
+      label: "Records corrected",
+      title: "The record conflict was resolved.",
+      summary: "The authoritative source was confirmed and the follow-up decision was recorded.",
+    };
+  }
+  if (run.state === "FAILED" || run.state === "STALE") {
+    return {
+      label: "Records corrected",
+      title: "The records were reconciled, but the follow-up needs attention.",
+      summary: "Open the saved decision to refresh the check before continuing.",
+    };
+  }
+  return original;
+}
+
+function situationQuestions(item: WorkItem, run: RecentRun | undefined) {
+  if (item.state !== "INFORMATION_NEEDED" || !run || run.state === "ABSTAINED") {
+    return item.presentation.suggested_questions.slice(0, 2);
+  }
+  if (run.state === "APPROVED" || run.state === "NO_ACTION_REQUIRED") {
+    return ["What was corrected?", "What was the final result?"];
+  }
+  if (run.state === "READY_FOR_REVIEW") {
+    return ["What changed after the records were corrected?", "Why is this response safe to review?"];
+  }
+  if (run.state === "REJECTED" || run.state === "DEFERRED") {
+    return ["What was corrected?", "What decision was recorded?"];
+  }
+  if (run.state === "FAILED" || run.state === "STALE") {
+    return ["What was corrected?", "What still needs attention?"];
+  }
+  return item.presentation.suggested_questions.slice(0, 2);
 }
 
 function actionLabel(item: WorkItem, recent: RecentRun[]) {

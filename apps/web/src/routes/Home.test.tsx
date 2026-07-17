@@ -4,7 +4,7 @@ import axe from "axe-core";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { buildDecisionPresentation } from "../lib/decisionPresentation";
 import type { WorkItem } from "../lib/liveApi";
 import Home from "./Home";
@@ -38,6 +38,12 @@ function Location() {
   const location = useLocation();
   return <div>Route: {location.pathname}{location.search}</div>;
 }
+
+beforeEach(() => {
+  sessionStorage.clear();
+  mocks.getWorkItems.mockReset();
+  mocks.startWorkItem.mockReset();
+});
 
 describe("adaptive operations home", () => {
   it("starts with one briefing and routes a plain-language question", async () => {
@@ -104,5 +110,76 @@ describe("adaptive operations home", () => {
     expect(screen.getByRole("heading", { name: "Protein coverage may fall below the safe minimum." })).toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole("button", { name: "Ask" }));
     expect(screen.getByText(/Route: \/assistant\?prompt=/)).toHaveTextContent("Protein%20coverage");
+  });
+
+  it("shows a corrected conflict as ready and continues its child run", async () => {
+    const conflict: WorkItem = {
+      ...item,
+      work_item_id: "SCN-E-TEST",
+      case_key: "scenario_e",
+      state: "INFORMATION_NEEDED",
+      urgency: "NOW",
+      due_label: null,
+      presentation: buildDecisionPresentation("E"),
+      primary_action_label: "Review blocking records",
+    };
+    sessionStorage.setItem("nourishops:recent-runs", JSON.stringify([{
+      run_id: "run_scn-e_corrected",
+      scenario_key: "scenario_e",
+      state: "READY_FOR_REVIEW",
+      updated_at: "2026-07-17T17:00:00Z",
+    }]));
+    mocks.getWorkItems.mockResolvedValue([conflict]);
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/runs/:runId" element={<Location />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("heading", { name: "The conflicting records were reconciled." })).toBeInTheDocument();
+    expect(screen.getByText("Records corrected")).toBeInTheDocument();
+    expect(screen.getByText(/Ready for review/)).toBeInTheDocument();
+    expect(screen.queryByText("Resolve this first")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "What changed after the records were corrected?" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Which records conflict?" })).not.toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Continue review" }));
+    expect(screen.getByText("Route: /runs/run_scn-e_corrected")).toBeInTheDocument();
+  });
+
+  it("shows a completed corrected conflict like every other completed situation", async () => {
+    const conflict: WorkItem = {
+      ...item,
+      work_item_id: "SCN-E-TEST",
+      case_key: "scenario_e",
+      state: "INFORMATION_NEEDED",
+      urgency: "NOW",
+      due_label: null,
+      presentation: buildDecisionPresentation("E"),
+      primary_action_label: "Review blocking records",
+    };
+    sessionStorage.setItem("nourishops:recent-runs", JSON.stringify([{
+      run_id: "run_scn-e_completed",
+      scenario_key: "scenario_e",
+      state: "APPROVED",
+      updated_at: "2026-07-17T17:05:00Z",
+    }]));
+    mocks.getWorkItems.mockResolvedValue([conflict]);
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/runs/:runId" element={<Location />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("heading", { name: "The record conflict was resolved." })).toBeInTheDocument();
+    expect(screen.getByText(/Completed/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "What was the final result?" })).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("button", { name: "View result" }));
+    expect(screen.getByText("Route: /runs/run_scn-e_completed")).toBeInTheDocument();
   });
 });

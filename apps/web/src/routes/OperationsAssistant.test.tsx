@@ -117,7 +117,7 @@ describe("operations agent conversation", () => {
 
     expect(await screen.findByText("Checking inventory, deliveries, and available responses")).toBeInTheDocument();
     resolveWorkItems([proteinItem]);
-    expect(await screen.findByText(/Next question to ask: “Why is the protein shortage urgent\?”/)).toBeInTheDocument();
+    expect(await screen.findByText(/The issue needs review by Aug 10, but no action has been taken/)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: proteinItem.presentation.issue.title })).toBeInTheDocument();
 
     await user.type(input, "Why is the protein shortage urgent?");
@@ -145,7 +145,7 @@ describe("operations agent conversation", () => {
     const input = screen.getByRole("textbox", { name: "Ask about operations" });
     await user.type(input, "What needs my attention first?");
     await user.click(screen.getByRole("button", { name: "Send message" }));
-    expect(await screen.findByText(/Next question to ask/)).toBeInTheDocument();
+    expect(await screen.findByText(/The issue needs review by Aug 10, but no action has been taken/)).toBeInTheDocument();
 
     await user.type(input, "Which tradeoffs should I consider?");
     await user.click(screen.getByRole("button", { name: "Send message" }));

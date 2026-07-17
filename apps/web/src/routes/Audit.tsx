@@ -26,7 +26,9 @@ const EVENT_LABEL: Record<string, string> = {
   DECISION_TRACE_RECORDED: "Decision process recorded",
   FALLBACK_USED: "Orchestrator fallback used",
   REVIEWER_FALLBACK_USED: "Reviewer fallback used",
+  BLOCKER_RESOLUTION_CONFIRMED: "Blocking records corrected",
   RECOMMENDATION_PREPARED: "Recommendation prepared",
+  RECOMMENDATION_ABSTAINED: "Recommendation withheld",
   MANAGER_APPROVED: "Manager approved",
   SIMULATED_ACTION_APPLIED: "Simulated action applied",
   SIMULATED_ACTION_COMPLETED: "Simulated action completed",
@@ -54,6 +56,9 @@ export default function Audit() {
   const trace = liveEvents?.find(
     (event) => event.event_type === "DECISION_TRACE_RECORDED",
   )?.payload.decision_trace as DecisionTrace | undefined;
+  const eventPayloads = new Map(
+    (liveEvents ?? []).map((event) => [event.event_id, event.payload]),
+  );
   const v = golden as unknown as Record<string, string>;
 
   return (
@@ -117,7 +122,7 @@ export default function Audit() {
           ) : (
             <Accordion align="start" size="lg" className="audit-events">
               {events.map((event) => {
-                const detail = eventDetail(event, letter);
+                const detail = eventDetail(event, letter, eventPayloads.get(event.semantic_id));
                 return (
                   <AccordionItem
                     key={event.sequence}
@@ -169,7 +174,11 @@ function stageOwner(stage: string): string {
 }
 
 /** Per-event inputs/outputs derived from the golden. */
-function eventDetail(e: AuditEvent, letter: Parameters<typeof getGolden>[0]): [string, string][] {
+export function eventDetail(
+  e: AuditEvent,
+  letter: Parameters<typeof getGolden>[0],
+  payload?: Record<string, unknown>,
+): [string, string][] {
   const golden = getGolden(letter);
   const overlay = getOverlay(letter);
   const risk = golden.risks.find((r) => r.is_primary) ?? golden.risks[0];
@@ -205,14 +214,23 @@ function eventDetail(e: AuditEvent, letter: Parameters<typeof getGolden>[0]): [s
         ["Priority score", risk ? wos(risk.priority_score) : "—"],
       ];
     case "RECOMMENDATION_PREPARED":
+      return recommendationDetail(e.semantic_id, payload, rec);
+    case "RECOMMENDATION_ABSTAINED":
       return [
         ["Recommendation", e.semantic_id],
-        ["Action", rec.action_id],
-        ["Quantity", lb(rec.requested_quantity_lb)],
-        ["Simulated cost", usd(rec.cost_usd)],
-        ["Confidence", titleCase(rec.confidence)],
-        ["Source records", rec.source_ids.join(", ")],
+        ["Result", "No action was recommended"],
+        ["Safety response", "Approval remained unavailable while the records conflicted"],
       ];
+    case "BLOCKER_RESOLUTION_CONFIRMED": {
+      const confirmed = asRecord(payload?.confirmed_values);
+      return [
+        ["Correction", e.semantic_id],
+        ["Confirmed source", textValue(payload?.authoritative_source_label)],
+        ["Shipment status", textValue(confirmed?.status)],
+        ["Expected arrival", typeof confirmed?.expected_week_start === "string" ? date(confirmed.expected_week_start) : "—"],
+        ["Shipment quantity", quantityValue(confirmed?.gross_quantity_lb)],
+      ];
+    }
     case "MANAGER_APPROVED":
       return [["Approved evaluation", e.semantic_id], ["Authority", "Human manager (required)"]];
     case "SIMULATED_ACTION_APPLIED":
@@ -221,4 +239,54 @@ function eventDetail(e: AuditEvent, letter: Parameters<typeof getGolden>[0]): [s
     default:
       return [["Reference", e.semantic_id]];
   }
+}
+
+function recommendationDetail(
+  semanticId: string,
+  payload: Record<string, unknown> | undefined,
+  goldenRecommendation: unknown,
+): [string, string][] {
+  const analysis = asRecord(payload?.analysis);
+  const recommendation = asRecord(analysis?.recommended_action) ?? asRecord(goldenRecommendation);
+  if (!recommendation) {
+    return [
+      ["Recommendation", semanticId],
+      ["Result", "No recommendation details were recorded for this event"],
+    ];
+  }
+  const decisionBrief = asRecord(payload?.decision_brief);
+  const rationale = asRecord(decisionBrief?.rationale);
+  const sourceIds = stringList(recommendation.source_ids).length
+    ? stringList(recommendation.source_ids)
+    : stringList(rationale?.evidence_ids);
+  return [
+    ["Recommendation", semanticId],
+    ["Action", textValue(recommendation.action_id)],
+    ["Quantity", quantityValue(recommendation.requested_quantity_lb)],
+    ["Simulated cost", currencyValue(recommendation.cost_usd)],
+    ["Confidence", typeof recommendation.confidence === "string" ? titleCase(recommendation.confidence) : "—"],
+    ["Source records", sourceIds.length ? sourceIds.join(", ") : "—"],
+  ];
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function textValue(value: unknown): string {
+  return typeof value === "string" && value.trim() ? value : "—";
+}
+
+function quantityValue(value: unknown): string {
+  return typeof value === "number" || typeof value === "string" ? lb(value) : "—";
+}
+
+function currencyValue(value: unknown): string {
+  return typeof value === "number" || typeof value === "string" ? usd(value) : "—";
+}
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
