@@ -2,18 +2,17 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Button,
-  OverflowMenu,
-  OverflowMenuItem,
   Tag,
   TextArea,
 } from "@carbon/react";
 import {
+  Chat,
   CheckmarkFilled,
   ChevronDown,
   Edit,
   Locked,
-  OverflowMenuVertical,
   StarFilled,
+  ThumbsDown,
   WarningAlt,
 } from "@carbon/icons-react";
 import { getActionMap, type ActionRecord, type ScenarioLetter } from "../lib/api";
@@ -59,6 +58,9 @@ export default function DecisionReview({ runId, state, setState, brief, knowledg
   const selectedEffect = selected.action_id === recommended.action.action_id
     ? presentation.recommendation.effect
     : "This response will be rechecked against the same verified constraints before approval.";
+  const assistantHref = `/assistant?prompt=${encodeURIComponent(
+    `I’m reviewing “${selectedTitle}”. What should I verify before I approve, change, or reject this recommendation?`,
+  )}`;
 
   function chooseAction(actionId: string) {
     const action = allActions.find((item) => item.action_id === actionId);
@@ -158,16 +160,18 @@ export default function DecisionReview({ runId, state, setState, brief, knowledg
 
               <div className="choice-actions">
                 <Button disabled={!approvalReady} onClick={() => setDialog("approve")}>Review and approve</Button>
+                <Button kind="danger--tertiary" renderIcon={ThumbsDown} onClick={() => setDialog("reject")}>Reject and record feedback</Button>
+              </div>
+
+              <div className="choice-support-actions" aria-label="Other ways to respond">
                 <Button kind="ghost" size="sm" renderIcon={ChevronDown} onClick={() => setShowOptions((value) => !value)} aria-expanded={showOptions}>
                   {showOptions ? "Hide other options" : "Show other options"}
                 </Button>
                 {brief.approval.editable && selected.action_id === recommended.action.action_id && (
                   <Button kind="ghost" size="sm" renderIcon={Edit} onClick={() => setDialog("edit")}>Change quantity</Button>
                 )}
-                <OverflowMenu aria-label="More actions" renderIcon={OverflowMenuVertical} size="sm" flipped>
-                  <OverflowMenuItem itemText="Reject recommendation" isDelete onClick={() => setDialog("reject")} />
-                  <OverflowMenuItem itemText="Defer decision" onClick={() => setDialog("defer")} />
-                </OverflowMenu>
+                <Button as={Link} to={assistantHref} kind="ghost" size="sm" renderIcon={Chat}>Ask the agent</Button>
+                <Button kind="ghost" size="sm" onClick={() => setDialog("defer")}>Decide later</Button>
               </div>
 
               {showOptions && (
@@ -275,9 +279,21 @@ function ReasonDialog({ mode, onClose, onConfirm }: { mode: "reject" | "defer"; 
   const reject = mode === "reject";
   const valid = !reject || value.trim().length > 0;
   return (
-    <Dialog title={reject ? "Reject this recommendation?" : "Defer this decision?"} primaryLabel={reject ? "Reject recommendation" : "Defer decision"} primaryTone={reject ? "danger" : "action"} primaryDisabled={!valid} onClose={onClose} onPrimary={() => onConfirm(value.trim())}>
-      <p>{reject ? "The recommendation will not be applied and the risk will remain open." : "The risk stays open and the projection remains unchanged."}</p>
-      <TextArea id={`${mode}-reason`} labelText={reject ? "Reason for rejecting" : "Deferral note (optional)"} maxCount={500} enableCounter value={value} invalid={!valid} invalidText="Enter a reason for rejecting this recommendation." onChange={(event) => setValue(event.target.value)} />
+    <Dialog title={reject ? "Reject this recommendation?" : "Decide later?"} primaryLabel={reject ? "Reject and record feedback" : "Decide later"} primaryTone={reject ? "danger" : "action"} primaryDisabled={!valid} onClose={onClose} onPrimary={() => onConfirm(value.trim())}>
+      <p>{reject
+        ? "The recommendation will not be applied. Your reason will be recorded as feedback and the operational risk will remain open."
+        : "No action will be applied. The risk stays open so you or another manager can return to it later."}</p>
+      <TextArea
+        id={`${mode}-reason`}
+        labelText={reject ? "What makes this recommendation unsuitable?" : "What are you waiting for? (optional)"}
+        helperText={reject ? "For example: cost, timing, quantity, missing context, or an operational constraint." : "For example: updated records, another approver, or confirmation from a partner."}
+        maxCount={500}
+        enableCounter
+        value={value}
+        invalid={!valid}
+        invalidText="Enter a reason so the feedback can be recorded."
+        onChange={(event) => setValue(event.target.value)}
+      />
     </Dialog>
   );
 }

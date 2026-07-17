@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Button, Tag, TextArea } from "@carbon/react";
-import { CheckmarkFilled, Locked, Renew, WarningAlt } from "@carbon/icons-react";
+import { Chat, CheckmarkFilled, Locked, Renew, WarningAlt } from "@carbon/icons-react";
 import type { ScenarioLetter } from "../lib/api";
 import {
   submitFeedback,
@@ -90,22 +90,50 @@ function ApprovedResult({ letter, runId, decision, execution, feedbackRecorded, 
   );
 }
 
-function UnappliedResult({ runId, decision, feedbackRecorded, onReset }: Props) {
+function UnappliedResult({ runId, decision, feedbackRecorded, brief, onReset }: Props) {
   const rejected = decision.kind === "reject";
+  const issueTitle = brief?.presentation.issue.title ?? "this operational risk";
+  const rejectionReason = (decision.reason ?? "it was not suitable").replace(/[.!?]+$/, "");
+  const assistantHref = `/assistant?prompt=${encodeURIComponent(rejected
+    ? `I rejected the recommendation for “${issueTitle}” because: ${rejectionReason}. Help me understand the remaining risk and possible next steps.`
+    : `I deferred the decision for “${issueTitle}”. What should I verify before I return to it?`)}`;
   return (
     <div className="journey-shell result-journey">
       <header className="journey-intro journey-intro--compact">
-        <Tag type="warm-gray" size="sm">{rejected ? "Recommendation rejected" : "Decision deferred"}</Tag>
-        <h1>{rejected ? "The recommendation was not applied" : "The risk remains open"}</h1>
-        <p>No simulated action or external action was performed.</p>
+        <Tag type={rejected && feedbackRecorded ? "green" : "warm-gray"} size="sm">{rejected && feedbackRecorded ? "Feedback recorded" : rejected ? "Recommendation rejected" : "Decision deferred"}</Tag>
+        <h1>{rejected ? "Recommendation rejected" : "The risk remains open"}</h1>
+        <p>{rejected && feedbackRecorded ? "Your decision and feedback were saved." : "Your decision was saved."} No simulated or external action was performed.</p>
       </header>
       <ol className="task-list">
         <CompletedStep number={1} title="Understand the issue" copy="The impact check was completed." />
-        <CompletedStep number={2} title="Choose a response" copy="The recommendation was reviewed by a manager." />
-        <li className="task-step task-step--blocked"><div className="task-step__marker"><WarningAlt size={20} aria-hidden /></div><div className="task-step__body"><div className="task-step__title"><div><span>Step 3</span><h2>Confirm</h2></div><Tag type="warm-gray">Recorded</Tag></div><p>{rejected ? "The recommendation was rejected." : "The decision was deferred for later review."}</p>{decision.reason && <blockquote>{decision.reason}</blockquote>}</div></li>
+        <CompletedStep number={2} title="Choose a response" copy={rejected ? "Rejected with manager feedback." : "Deferred for later review."} />
+        <li className="task-step task-step--blocked"><div className="task-step__marker"><WarningAlt size={20} aria-hidden /></div><div className="task-step__body"><div className="task-step__title"><div><span>Step 3</span><h2>Record decision</h2></div><Tag type="warm-gray">Recorded</Tag></div><p>{rejected ? "The recommendation was not applied and the risk remains open." : "No response was applied and the risk remains open."}</p>{decision.reason && <blockquote>{decision.reason}</blockquote>}</div></li>
       </ol>
-      <details className="plain-disclosure recommendation-feedback-disclosure"><summary>Give feedback on this recommendation</summary><RecommendationFeedback runId={runId} recorded={feedbackRecorded} /></details>
-      <div className="result-actions"><Button as={Link} to="/">Return to Today</Button><Button as={Link} kind="tertiary" to={`/runs/${runId}/audit`}>Open audit record</Button><Button kind="ghost" renderIcon={Renew} onClick={onReset}>Start clean run</Button></div>
+
+      {rejected && feedbackRecorded ? (
+        <section className="feedback-success feedback-success--decision" aria-label="Feedback recorded">
+          <CheckmarkFilled size={20} aria-hidden />
+          <span><strong>Feedback recorded</strong><small>Your reason is attached to this recommendation in the audit record.</small></span>
+        </section>
+      ) : (
+        <details className="plain-disclosure recommendation-feedback-disclosure"><summary>Give feedback on this recommendation</summary><RecommendationFeedback runId={runId} recorded={feedbackRecorded} /></details>
+      )}
+
+      <section className="post-decision-panel" aria-labelledby="post-decision-title">
+        <div>
+          <span className="feedback-panel__eyebrow">Next step</span>
+          <h2 id="post-decision-title">What would you like to do now?</h2>
+          <p>{rejected ? "Explore another path with the agent, or finish this review and leave the risk open." : "Ask what information would unblock the decision, or finish for now."}</p>
+        </div>
+        <div className="post-decision-panel__actions">
+          <Button as={Link} to={assistantHref} renderIcon={Chat}>Ask the agent</Button>
+          <Button as={Link} to="/" kind="secondary">Finish and return to Today</Button>
+        </div>
+        <div className="post-decision-panel__links">
+          <Button as={Link} kind="ghost" size="sm" to={`/runs/${runId}/audit`}>View audit record</Button>
+          <Button kind="ghost" size="sm" renderIcon={Renew} onClick={onReset}>Start a new review</Button>
+        </div>
+      </section>
       <p className="journey-reassurance"><Locked size={16} aria-hidden /> No external action was taken.</p>
     </div>
   );

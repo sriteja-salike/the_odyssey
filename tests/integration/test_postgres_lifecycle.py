@@ -96,6 +96,33 @@ def test_scenario_a_lifecycle_from_seeded_sources() -> None:
 
 
 @pytest.mark.skipif(not DATABASE_URL, reason="set NOURISHOPS_TEST_DATABASE_URL for PostgreSQL integration")
+def test_rejection_records_feedback_in_the_decision_transaction() -> None:
+    store = PostgresStore(DATABASE_URL)
+    store.migrate()
+    store.seed_integrations()
+    service = NourishOpsService(store)
+
+    run = service.evaluate(service.create_run("scenario_a")["run_id"])
+    recommendation = run["analysis"]["recommended_action"]
+    rejected = service.decide(
+        run["run_id"],
+        "reject",
+        recommendation["action_id"],
+        recommendation["requested_quantity_lb"],
+        "The delivery timing no longer works.",
+    )
+
+    assert rejected["state"] == "REJECTED"
+    assert rejected["feedback"]["rating"] == "NOT_HELPFUL"
+    assert rejected["feedback"]["reason"] == "The delivery timing no longer works."
+    assert rejected["feedback"]["survey"] == {"source": "decision_rejection"}
+    assert [event["event_type"] for event in store.get_events(run["run_id"])][-2:] == [
+        "MANAGER_REJECTED",
+        "RECOMMENDATION_FEEDBACK",
+    ]
+
+
+@pytest.mark.skipif(not DATABASE_URL, reason="set NOURISHOPS_TEST_DATABASE_URL for PostgreSQL integration")
 def test_scenario_b_short_life_offer_lifecycle() -> None:
     store = PostgresStore(DATABASE_URL)
     store.migrate()

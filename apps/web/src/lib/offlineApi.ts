@@ -420,8 +420,23 @@ export function oDecideRun(runId: string, decision: Decision): LiveRun {
       throw new Error("Add a reason before approving a different action.");
     }
   }
+  if (decision.kind === "reject" && !decision.reason?.trim()) {
+    throw new Error("Enter a reason so the rejection feedback can be recorded.");
+  }
   const phase = decision.kind === "reject" ? "REJECTED" : decision.kind === "defer" ? "DEFERRED" : "APPROVED";
   setRunState(runId, { phase, decision });
+  if (decision.kind === "reject") {
+    const record = readRecord(runId);
+    writeRecord(runId, {
+      ...record,
+      feedback: {
+        feedback_id: `FDB-${crypto.randomUUID().slice(0, 8)}`,
+        rating: "NOT_HELPFUL",
+        reason: decision.reason!.trim(),
+        survey: { source: "decision_rejection" },
+      },
+    });
+  }
   return buildRun(letter, runId);
 }
 

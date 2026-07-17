@@ -93,6 +93,27 @@ describe("offline demo contract", () => {
     })).toThrow("frozen evaluated quantity");
   });
 
+  it("records rejection feedback as part of the decision", () => {
+    const analyzed = oEvaluateRun(oCreateRun("A").run_id);
+    const recommendation = analyzed.decision_brief!.recommendation!;
+    const rejected = oDecideRun(analyzed.run_id, {
+      kind: "reject",
+      actionId: recommendation.action.action_id,
+      quantityLb: recommendation.action.requested_quantity_lb,
+      reason: "The delivery timing no longer works.",
+    });
+
+    expect(rejected.state).toBe("REJECTED");
+    expect(rejected.feedback).toMatchObject({
+      rating: "NOT_HELPFUL",
+      reason: "The delivery timing no longer works.",
+      survey: { source: "decision_rejection" },
+    });
+    expect(oGetEvents(rejected.run_id).map((event) => event.event_type)).toEqual(
+      expect.arrayContaining(["MANAGER_REJECTED", "RECOMMENDATION_FEEDBACK"]),
+    );
+  });
+
   it("persists recommendation and outcome feedback into the audit stream", () => {
     const analyzed = oEvaluateRun(oCreateRun("B").run_id);
     const recommendation = analyzed.decision_brief!.recommendation!;

@@ -628,6 +628,15 @@ class NourishOpsService:
             execution_receipt,
             connection,
         )
+        if state == "REJECTED":
+            self.store.add_feedback(
+                run_id,
+                recommendation["recommendation_id"],
+                "NOT_HELPFUL",
+                clean_reason,
+                {"source": "decision_rejection"},
+                connection,
+            )
         return self.get_run(run_id, connection)
 
     def record_feedback(self, run_id: str, rating: str, reason: str | None,
