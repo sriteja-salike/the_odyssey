@@ -72,9 +72,10 @@ export default function AppFrame({ runId, letter, active, onStartClean, children
   return (
     <div className="app-shell">
       <Header aria-label="Nourish Ops" className="app-header">
-        <HeaderName as={NavLink} to={`/runs/${runId}`} prefix="Nourish ">Ops</HeaderName>
+        <HeaderName as={NavLink} to="/" prefix="">Nourish Ops</HeaderName>
         <HeaderNavigation aria-label="Primary navigation">
-          <HeaderMenuItem as={NavLink} to={`/runs/${runId}`} end isActive={active === "decision"}>Today</HeaderMenuItem>
+          <HeaderMenuItem as={NavLink} to="/">Home</HeaderMenuItem>
+          <HeaderMenuItem as={NavLink} to={`/runs/${runId}`} end isActive={active === "decision"}>Current decision</HeaderMenuItem>
           <HeaderMenu
             aria-label="Records"
             menuLinkName="Records"
@@ -91,7 +92,7 @@ export default function AppFrame({ runId, letter, active, onStartClean, children
             flipped
             className="header-overflow"
           >
-            <OverflowMenuItem itemText="Switch scenario" onClick={() => {
+            <OverflowMenuItem itemText="Open demo fixture" onClick={() => {
               setPendingScenario(letter);
               setScenarioOpen(true);
             }} />
@@ -101,10 +102,11 @@ export default function AppFrame({ runId, letter, active, onStartClean, children
       </Header>
 
       <nav className="mobile-primary-nav" aria-label="Primary navigation">
-        <NavLink to={`/runs/${runId}`} end>Today</NavLink>
+        <NavLink to="/">Home</NavLink>
+        <NavLink to={`/runs/${runId}`} end>Decision</NavLink>
         {letter === "A" && <NavLink className="mobile-compare-link" to={`/runs/${runId}/compare`}>Compare</NavLink>}
         <NavLink to={`/runs/${runId}/audit`}>Audit</NavLink>
-        <button type="button" onClick={() => setScenarioOpen(true)}>Switch scenario</button>
+        <button type="button" onClick={() => setScenarioOpen(true)}>Demo fixture</button>
       </nav>
 
       <div className="simulation-note" role="note">
@@ -138,13 +140,13 @@ export default function AppFrame({ runId, letter, active, onStartClean, children
 
       {scenarioOpen && (
         <Dialog
-          title="Switch scenario?"
-          primaryLabel={working ? "Opening…" : "Create new scenario run"}
+          title="Open another demo fixture?"
+          primaryLabel={working ? "Opening…" : "Create demo run"}
           primaryDisabled={working || pendingScenario === letter}
           onPrimary={() => void switchScenario()}
           onClose={() => setScenarioOpen(false)}
         >
-          <p>Choose another synthetic situation. Your current run and its records stay unchanged.</p>
+          <p>This developer control opens a frozen regression fixture. In normal use, employees start from Home and the system matches the situation automatically.</p>
           <Select
             id="scenario-switcher"
             labelText="Scenario"

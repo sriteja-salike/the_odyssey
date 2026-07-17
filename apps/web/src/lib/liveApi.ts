@@ -1,11 +1,12 @@
 /* Durable run API with an explicit browser-only demo fallback. Domain errors
    from a reachable API are always surfaced; only connection failures/timeouts
    enter offline mode. */
-import { getGolden, type ScenarioLetter } from "./api";
+import { getGolden, getScenarioEvidence, type ScenarioLetter } from "./api";
 import { letterFromRunId } from "./run";
+import { buildDecisionPresentation } from "./decisionPresentation";
 import type { Decision } from "./runState";
 import type { DecisionKind } from "./runState";
-import type { LiveEvent, LiveRun } from "./liveTypes";
+import type { LiveEvent, LiveRun, OperationsAssistantResponse, WorkItem } from "./liveTypes";
 import {
   oCreateRun,
   oDecideRun,
@@ -30,6 +31,10 @@ export type {
   LiveExecution,
   LiveRun,
   SolverView,
+  DecisionPresentation,
+  DecisionVisualPresentation,
+  OperationsAssistantResponse,
+  WorkItem,
 } from "./liveTypes";
 
 interface Envelope<T> { data: T }
@@ -144,6 +149,56 @@ export async function activeRun(letter: ScenarioLetter): Promise<LiveRun> {
     return await load;
   } finally {
     delete activePromises[letter];
+  }
+}
+
+export async function createCaseRun(caseKey: string, parentRunId?: string): Promise<LiveRun> {
+  const letter = caseKey.replace("scenario_", "").slice(0, 1).toUpperCase() as ScenarioLetter;
+  if (OFFLINE) return createRun(letter, parentRunId);
+  try {
+    const run = await request<LiveRun>("/runs", {
+      method: "POST",
+      headers: idempotencyHeaders(),
+      body: JSON.stringify({ scenario_key: caseKey, parent_run_id: parentRunId }),
+    });
+    sessionStorage.setItem(keyForLetter(letter), run.run_id);
+    return run;
+  } catch (error) {
+    if (!(error instanceof OfflineError)) throw error;
+    markOffline();
+    return createRun(letter, parentRunId);
+  }
+}
+
+export async function getWorkItems(): Promise<WorkItem[]> {
+  if (OFFLINE) return offlineWorkItems();
+  try {
+    return await request<WorkItem[]>("/work-items", undefined, 15_000);
+  } catch (error) {
+    if (!(error instanceof OfflineError)) throw error;
+    markOffline();
+    return offlineWorkItems();
+  }
+}
+
+export async function startWorkItem(item: WorkItem): Promise<LiveRun> {
+  const draft = await createCaseRun(item.case_key);
+  const evaluated = await evaluateRun(draft.run_id);
+  sessionStorage.setItem("nourishops:last-run", evaluated.run_id);
+  return evaluated;
+}
+
+export async function askOperationsAssistant(message: string): Promise<OperationsAssistantResponse> {
+  if (OFFLINE) return offlineAssistantAnswer(message);
+  try {
+    return await request<OperationsAssistantResponse>("/operations-assistant/messages", {
+      method: "POST",
+      body: JSON.stringify({ message }),
+    }, 15_000);
+  } catch (error) {
+    if (!(error instanceof OfflineError)) throw error;
+    markOffline();
+    return offlineAssistantAnswer(message);
   }
 }
 
@@ -330,4 +385,51 @@ export async function getEvents(runId: string): Promise<LiveEvent[]> {
     markOffline();
     return oGetEvents(runId);
   }
+}
+
+function offlineWorkItems(): WorkItem[] {
+  return (["A", "B", "C", "D", "E"] as ScenarioLetter[]).map((letter) => {
+    const presentation = buildDecisionPresentation(letter);
+    const golden = getGolden(letter);
+    const primary = golden.risks.find((risk) => risk.is_primary) ?? golden.risks[0];
+    const state = golden.decision_status === "ABSTAINED" ? "INFORMATION_NEEDED" : golden.decision_status === "READY_FOR_REVIEW" ? "NEEDS_REVIEW" : "NO_ACTION_REQUIRED";
+    const due = primary?.first_breach_week_start ? presentation.detail_facts.find((item) => item.label === "Expected breach")?.value : null;
+    return {
+      schema_version: "work-item/1.0.0",
+      work_item_id: golden.scenario_id,
+      case_key: `scenario_${letter.toLowerCase()}`,
+      state,
+      urgency: state === "INFORMATION_NEEDED" ? "NOW" : "SOON",
+      due_label: due ? `Review by ${due}` : null,
+      source_count: getScenarioEvidence(letter).length,
+      presentation,
+      primary_action_label: state === "NEEDS_REVIEW" ? "Review response" : state === "INFORMATION_NEEDED" ? "Review records" : "View details",
+      synthetic: true,
+    };
+  });
+}
+
+function offlineAssistantAnswer(message: string): OperationsAssistantResponse {
+  const items = offlineWorkItems();
+  const value = message.toLowerCase();
+  const archetype = value.match(/produce|cold|storage/) ? "PERISHABLE_CAPACITY"
+    : value.match(/donation|snack/) ? "DONATION_DISPOSITION"
+      : value.match(/budget|cost/) ? "RESOURCE_TRADEOFF"
+        : value.match(/conflict|record/) ? "DATA_RECONCILIATION"
+          : "INBOUND_DISRUPTION";
+  const workItem = items.find((item) => item.presentation.archetype === archetype) ?? items[0];
+  const { issue, recommendation } = workItem.presentation;
+  const answer = value.includes("information") || value.includes("checked") || value.includes("source")
+    ? `I checked ${workItem.source_count} active evidence records plus the frozen inventory, inbound, policy, capacity, and action-catalog snapshots for this case. Open the response to see every source and assumption.`
+    : recommendation
+      ? `${issue.title} The verified response is: ${recommendation.title}. ${recommendation.effect}`
+      : `${issue.title} ${issue.summary} The system stopped safely and did not create an approval.`;
+  return {
+    schema_version: "operations-assistant-response/1.0.0",
+    answer,
+    work_item: workItem,
+    suggested_questions: workItem.presentation.suggested_questions,
+    authority_note: "The assistant explains verified data and routes decisions; only a manager can approve a simulated action.",
+    synthetic: true,
+  };
 }

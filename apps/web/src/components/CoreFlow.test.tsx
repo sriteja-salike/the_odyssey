@@ -15,7 +15,7 @@ import SafeStop from "./SafeStop";
 describe("core decision flow", () => {
   it("starts with one clear impact-check action and passes axe", async () => {
     const onAnalyze = vi.fn();
-    const { container } = render(<DraftWorkspace letter="A" onAnalyze={onAnalyze} />);
+    const { container } = render(<DraftWorkspace onAnalyze={onAnalyze} />);
     const primary = screen.getByRole("button", { name: "Check impact" });
     expect(screen.getByRole("heading", { name: "Understand the issue" })).toBeInTheDocument();
     expect(screen.getAllByRole("button")).toHaveLength(1);
@@ -48,7 +48,7 @@ describe("core decision flow", () => {
 
   it("blocks Scenario E and renders no approval control", async () => {
     const run = oEvaluateRun(oCreateRun("E").run_id);
-    const { container } = render(<SafeStop status="ABSTAINED" letter="E" brief={run.decision_brief!} onStartClean={() => undefined} />);
+    const { container } = render(<SafeStop status="ABSTAINED" brief={run.decision_brief!} onStartClean={() => undefined} />);
     expect(screen.getByRole("heading", { name: "Choose a response" })).toBeInTheDocument();
     expect(screen.getByText("Blocked")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /approve/i })).not.toBeInTheDocument();

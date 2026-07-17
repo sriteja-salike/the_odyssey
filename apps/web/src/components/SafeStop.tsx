@@ -1,6 +1,5 @@
 import { Button, Tag } from "@carbon/react";
 import { CheckmarkFilled, Locked, Renew, WarningAlt } from "@carbon/icons-react";
-import type { ScenarioLetter } from "../lib/api";
 import type { DecisionBrief } from "../lib/liveApi";
 import type { DecisionStatus } from "../types/golden";
 import DecisionVisual from "./DecisionVisual";
@@ -14,12 +13,11 @@ const HEADLINE: Partial<Record<DecisionStatus, string>> = {
 
 export default function SafeStop({
   status,
-  letter,
+  brief,
   onStartClean,
   onRetry,
 }: {
   status: DecisionStatus;
-  letter: ScenarioLetter;
   brief?: DecisionBrief;
   onStartClean: () => void;
   onRetry?: () => void;
@@ -44,7 +42,7 @@ export default function SafeStop({
           <div className="task-step__marker"><CheckmarkFilled size={20} aria-hidden /></div>
           <div className="task-step__body">
             <div className="task-step__title"><div><span>Step 1</span><h2>Understand the issue</h2></div><Tag type="green">Complete</Tag></div>
-            {abstained ? <DecisionVisual letter={letter} /> : <p>The impact check finished without changing inventory, budget, or external systems.</p>}
+            {abstained && brief ? <DecisionVisual presentation={brief.presentation} /> : <p>The impact check finished without changing inventory, budget, or external systems.</p>}
           </div>
         </li>
         <li className="task-step task-step--blocked">

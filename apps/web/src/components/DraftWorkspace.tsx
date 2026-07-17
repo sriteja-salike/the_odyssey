@@ -1,18 +1,14 @@
 import { Button, Tag } from "@carbon/react";
-import { ArrowRight, Document, Locked } from "@carbon/icons-react";
-import { getNotice, getOverlay, type ScenarioLetter } from "../lib/api";
-import { date } from "../lib/format";
+import { ArrowRight, DataReference, Locked, Time } from "@carbon/icons-react";
+import type { WorkItem } from "../lib/liveApi";
 
-export default function DraftWorkspace({ letter, onAnalyze }: { letter: ScenarioLetter; onAnalyze: () => void }) {
-  const overlay = getOverlay(letter);
-  const notice = getNotice(letter);
-
+export default function DraftWorkspace({ item, onAnalyze }: { item?: WorkItem; onAnalyze: () => void }) {
   return (
     <div className="journey-shell journey-shell--draft">
       <header className="journey-intro">
-        <Tag type="warm-gray" size="sm">New supply issue</Tag>
-        <h1>{overlay.display_name}</h1>
-        <p>Review the new information, then let Nourish Ops check how it affects the next four weeks.</p>
+        <Tag type="warm-gray" size="sm">New operations issue</Tag>
+        <h1>{item?.presentation.issue.title ?? "Check a new operations issue"}</h1>
+        <p>{item?.presentation.issue.summary ?? "Nourish Ops will check the verified records and identify whether a response is needed."}</p>
       </header>
 
       <ol className="task-list">
@@ -20,24 +16,24 @@ export default function DraftWorkspace({ letter, onAnalyze }: { letter: Scenario
           <div className="task-step__marker" aria-hidden>1</div>
           <div className="task-step__body">
             <div className="task-step__title"><div><span>Step 1</span><h2>Understand the issue</h2></div><Tag type="blue">Current</Tag></div>
-            {notice && (
-              <article className="incoming-notice">
-                <Document size={22} aria-hidden />
+            {item && (
+              <div className="incoming-notice incoming-notice--case">
+                <DataReference size={22} aria-hidden />
                 <div>
-                  <strong>{notice.title}</strong>
-                  <span>Received {date(notice.recorded_at.slice(0, 10))} · synthetic notice</span>
-                  <p>{notice.body}</p>
+                  <strong>{item.presentation.issue.title}</strong>
+                  <span>{item.source_count} verified sources are ready to check</span>
+                  {item.due_label && <p><Time size={16} aria-hidden /> {item.due_label}</p>}
                 </div>
-              </article>
+              </div>
             )}
             <div className="task-primary-row">
               <Button renderIcon={ArrowRight} onClick={onAnalyze}>Check impact</Button>
-              <span>Usually takes a few seconds</span>
+              <span>Checks inventory, deliveries, policies, capacity, and feasible responses</span>
             </div>
           </div>
         </li>
 
-        <PendingStep number={2} title="Choose a response" copy="A recommended next step will appear after the impact check." />
+        <PendingStep number={2} title="Choose a response" copy="A verified next step appears only if the data supports one." />
         <PendingStep number={3} title="Confirm" copy="You will review every consequence before anything is recorded." />
       </ol>
 

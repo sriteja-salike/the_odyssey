@@ -29,6 +29,7 @@ from nourishops.application.execution import (
     SimulatedExecutionAdapter,
     build_action_intent,
 )
+from nourishops.application.presentation import WorkItem, build_work_item
 from nourishops.persistence.postgres import PostgresStore, jsonable, sha256
 
 
@@ -86,6 +87,92 @@ class NourishOpsService:
             )
         return run["decision_brief"]
 
+    def list_work_items(self) -> list[dict[str, Any]]:
+        """Return deterministic, non-persisted previews for the operations home.
+
+        These previews route the coordinator into a real frozen run; they do not
+        call a language model, create a recommendation record, or execute work.
+        """
+        work_items: list[WorkItem] = []
+        for scenario in self.store.list_scenarios():
+            scenario_key = scenario["key"]
+            snapshot = self.store.load_scenario(scenario_key)
+            package = self.store.scenario_registry.get(scenario_key)
+            solver = self.solver_registry.select(
+                snapshot, package.problem_type, package.solver_id,
+            )
+            analysis = jsonable(solver.solve(snapshot))
+            validate_solver_result(analysis, snapshot.scenario_id)
+            context = self.store.scenario_context(scenario_key)
+            work_items.append(build_work_item(scenario_key, analysis, context))
+        return [item.model_dump(mode="json") for item in work_items]
+
+    def answer_operations_question(self, message: str) -> dict[str, Any]:
+        """Answer common coordinator questions from verified work-item facts.
+
+        The assistant is a navigation and explanation layer. It never ranks a
+        new action, changes a quantity, or bypasses the existing approval flow.
+        """
+        items = self.list_work_items()
+        normalized = message.casefold()
+        selected = items[0]
+        keyword_map = {
+            "produce": "PERISHABLE_CAPACITY",
+            "cold": "PERISHABLE_CAPACITY",
+            "storage": "PERISHABLE_CAPACITY",
+            "donation": "DONATION_DISPOSITION",
+            "snack": "DONATION_DISPOSITION",
+            "budget": "RESOURCE_TRADEOFF",
+            "cost": "RESOURCE_TRADEOFF",
+            "conflict": "DATA_RECONCILIATION",
+            "record": "DATA_RECONCILIATION",
+            "delivery": "INBOUND_DISRUPTION",
+            "shipment": "INBOUND_DISRUPTION",
+            "protein": "INBOUND_DISRUPTION",
+        }
+        requested_archetype = next(
+            (archetype for keyword, archetype in keyword_map.items() if keyword in normalized),
+            None,
+        )
+        if requested_archetype:
+            selected = next(
+                (item for item in items if item["presentation"]["archetype"] == requested_archetype),
+                selected,
+            )
+
+        presentation = selected["presentation"]
+        issue = presentation["issue"]
+        recommendation = presentation["recommendation"]
+        if "most urgent" in normalized or "urgent" in normalized:
+            answer = f"Start with {issue['title']} {issue['summary']}"
+        elif "information" in normalized or "checked" in normalized or "source" in normalized:
+            answer = (
+                f"I checked {selected['source_count']} active evidence records plus the frozen inventory, "
+                "inbound, policy, capacity, and action-catalog snapshots for this case. "
+                "Open the response to see every source and assumption."
+            )
+        elif "why" in normalized and recommendation:
+            answer = f"{recommendation['effect']} {issue['summary']}"
+            if recommendation.get("caution"):
+                answer = f"{answer} {recommendation['caution']}"
+        elif recommendation:
+            answer = (
+                f"{issue['title']} The verified response is: {recommendation['title']}. "
+                f"{recommendation['effect']}"
+            )
+        else:
+            answer = (
+                f"{issue['title']} {issue['summary']} The system stopped safely and did not create an approval."
+            )
+        return {
+            "schema_version": "operations-assistant-response/1.0.0",
+            "answer": answer,
+            "work_item": selected,
+            "suggested_questions": presentation["suggested_questions"],
+            "authority_note": "The assistant explains verified data and routes decisions; only a manager can approve a simulated action.",
+            "synthetic": True,
+        }
+
     def get_context_bundle(self, run_id: str) -> dict[str, Any]:
         run = self.get_run(run_id)
         context_hash = sha256({
@@ -120,6 +207,8 @@ class NourishOpsService:
             "scenario_context_version": "scenario-context/1.0.0",
             "context_bundle_version": "context-bundle/1.0.0",
             "decision_brief_version": "decision-brief/1.0.0",
+            "decision_presentation_version": "decision-presentation/1.0.0",
+            "work_item_version": "work-item/1.0.0",
             "decision_trace_version": "decision-trace/1.0.0",
             "recommendation_package_version": "recommendation-package/1.0.0",
             "agent": self.agent.describe().model_dump(mode="json"),

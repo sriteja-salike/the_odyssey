@@ -42,7 +42,7 @@ The prototype runs on synthetic, labeled data. We may say it detects predefined 
 
 ## Running the production-shaped simulation
 
-Docker starts PostgreSQL, FastAPI, and the React demo; startup migrations seed synthetic connector snapshots for the warehouse, receiving ERP, distribution history, donor CRM, procurement catalog, policy registry, and operations knowledge inbox. The backend evaluates all frozen Scenarios A–E through one versioned scenario-package, solver, agent, persistence, and API path. The current UI remains the legacy golden-backed demo and will be redesigned against the typed decision brief after backend scenario work.
+Docker starts PostgreSQL, FastAPI, and the React application; startup migrations seed synthetic connector snapshots for the warehouse, receiving ERP, distribution history, donor CRM, procurement catalog, policy registry, and operations knowledge inbox. The adaptive Home turns the frozen A–E fixtures into plain-language work items, while the supporting assistant can answer verified questions and route into the same human-approved decision path. Reusable `DecisionPresentation` archetypes keep fixture names and scenario letters out of the operator experience.
 
 ```bash
 make demo
@@ -97,6 +97,7 @@ Architecture and the new-scenario checklist are in
 | `make demo` | Builds and starts PostgreSQL + FastAPI + React, seeding synthetic source-system snapshots |
 | `make demo-down` | Stops the demo while retaining the PostgreSQL volume |
 
-The deterministic engine and backend decision substrate cover Scenarios A–E. The next
-phase is adding more verified scenario/problem packages and deterministic solver types;
-the user-centered UI redesign follows those backend contracts.
+The deterministic engine, adaptive Home, assistant handoff, and decision substrate cover
+Scenarios A–E. New verified packages should map to an existing presentation archetype
+where possible; genuinely new problem types add a solver and semantic presentation mapping,
+not a memorized scenario tile.

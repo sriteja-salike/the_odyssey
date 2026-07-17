@@ -18,6 +18,10 @@ class CreateRunRequest(BaseModel):
     parent_run_id: str | None = None
 
 
+class OperationsAssistantRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=1000)
+
+
 class DecisionRequest(BaseModel):
     kind: Literal["approve", "edit-approve", "reject", "defer"]
     recommendation_id: str = Field(pattern=r"^REC-[A-Z0-9_-]+$")

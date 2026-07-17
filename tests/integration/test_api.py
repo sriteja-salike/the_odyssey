@@ -38,6 +38,7 @@ def test_public_api_replay_and_typed_decision_brief() -> None:
         assert brief.status_code == 200
         assert brief.json()["data"]["schema_version"] == "decision-brief/1.0.0"
         assert brief.json()["data"]["approval"]["external_writes_allowed"] is False
+        assert brief.json()["data"]["presentation"]["schema_version"] == "decision-presentation/1.0.0"
 
         evaluated_run = evaluated.json()["data"]
         recommendation = evaluated_run["analysis"]["recommended_action"]
@@ -55,6 +56,24 @@ def test_public_api_replay_and_typed_decision_brief() -> None:
         )
         assert stale.status_code == 409
         assert stale.json()["error"]["code"] == "STALE_RECOMMENDATION"
+
+
+@requires_postgres
+def test_home_work_items_and_assistant_route_verified_cases() -> None:
+    with TestClient(app) as client:
+        items = client.get("/api/v1/work-items")
+        assert items.status_code == 200
+        assert len(items.json()["data"]) == 5
+        assert items.json()["data"][0]["presentation"]["archetype"] == "INBOUND_DISRUPTION"
+        assert "USDA" not in items.json()["data"][0]["presentation"]["issue"]["title"]
+
+        answer = client.post(
+            "/api/v1/operations-assistant/messages",
+            json={"message": "Do any records conflict?"},
+        )
+        assert answer.status_code == 200
+        assert answer.json()["data"]["work_item"]["state"] == "INFORMATION_NEEDED"
+        assert "only a manager" in answer.json()["data"]["authority_note"]
 
 
 @requires_postgres

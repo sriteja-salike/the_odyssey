@@ -1,22 +1,22 @@
 :root {
   /* Warm, calm service-design palette grounded in Carbon semantics. */
-  --bg: #fbfaf6;
+  --bg: #f3f0e7;
   --appbar: #ffffff;
-  --panel: #ffffff;
-  --raised: #f7f5ef;
-  --layer: #efede7;
-  --line: #dfddd5;
-  --line-strong: #aaa79e;
+  --panel: #fffefa;
+  --raised: #ebe7dc;
+  --layer: #e4dfd3;
+  --line: #d8d1c3;
+  --line-strong: #9e9a90;
 
-  --ink: #18211f;
-  --sub: #4f5b57;
-  --quiet: #68726e;
+  --ink: #173a31;
+  --sub: #4f5f59;
+  --quiet: #6f7772;
   --inverse: #ffffff;
 
-  --action: #0b57d0;
-  --action-hover: #0847aa;
+  --action: #10213d;
+  --action-hover: #1a3158;
   --action-ink: #ffffff;
-  --action-tint: #edf3ff;
+  --action-tint: #edf0f5;
   --breach: #b4422b;
   --breach-tint: #fff2ed;
   --warn: #9b6500;
@@ -29,6 +29,7 @@
   --series-expected: #8a3ffc;
 
   --font-sans: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Newsreader", Georgia, serif;
   --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
 
   --s1: 4px;

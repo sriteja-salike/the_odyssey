@@ -31,6 +31,17 @@ Design implications:
 
 This persona remains a design assumption until validated with food-bank staff.
 
+### 0.1.1 Adaptive starting point
+
+The product starts at `/`, not inside a remembered scenario. Home is an adaptive operations briefing with two complementary lanes:
+
+1. a prominent composer for a question or issue Jordan already has; and
+2. one verified work item at a time when the system has found something that may need a decision.
+
+The assistant may answer a verified-data question and route Jordan into the matching decision workflow. It may not approve, silently mutate a run, invent a case, or replace the structured review and confirmation steps. Chat is therefore a supporting lane, not the application shell and not the only way to work.
+
+Home uses operational titles such as `Protein coverage may fall below the safe minimum.` Scenario letters, fixture names, partner aliases, and demo memory tests never appear as the task label. `Continue to next item` advances the briefing without adding a card grid or queue dashboard.
+
 ### 0.2 Three-step journey
 
 The UI derives the active step from the backend run state; it does not persist a second workflow state.
@@ -58,7 +69,7 @@ The active recommendation shows only the action, quantity, simulated cost, timin
 
 ### 0.4 Shell and navigation
 
-The Phase 1 shell contains `Nourish Ops`, `Today`, `Records`, and an overflow menu. `Records` contains Compare (where available) and Audit for the current run. The overflow menu contains `Switch scenario` and `Start clean run`. Run ID, connection mode, source IDs, versions, and technical context live under `Decision details` or Records. Route URLs remain unchanged.
+The Phase 1 shell contains `Nourish Ops`, `Home`, `Ask`, `Records`, and an overflow menu. Home owns the adaptive briefing; Ask opens the focused assistant; Records points to the current run's Audit/Compare surfaces. Demo fixtures are developer controls under overflow and are never the primary navigation model. Run ID, connection mode, source IDs, versions, and technical context live under `Decision details` or Records. Existing run route URLs remain unchanged.
 
 ### 0.5 Scenario explanation contract
 
@@ -75,6 +86,20 @@ Each decision uses no more than one compact verified visual, always paired with 
 ### 0.6 Result and feedback
 
 After approval, outcome feedback (`Did the action work?`) is the first optional question. Recommendation-quality feedback is behind `Give feedback on this recommendation`. Receipt IDs, adapter names, and target-system information remain under `Decision details`. Existing backend endpoints and recorded states are preserved.
+
+### 0.7 General case templates
+
+The A–E scenarios are frozen regression fixtures, not user-facing templates. The reusable templates are semantic operational archetypes:
+
+| Archetype | Reusable skeleton |
+|---|---|
+| `INBOUND_DISRUPTION` | Coverage risk caused by an inbound change; date, category, minimum, recovery, and response are filled from verified analysis. |
+| `PERISHABLE_CAPACITY` | Perishable offer versus cold-storage/usable-life constraints. |
+| `DONATION_DISPOSITION` | Donation fit, local target, and useful disposition. |
+| `RESOURCE_TRADEOFF` | Available resource versus competing needs and residual risk. |
+| `DATA_RECONCILIATION` | Conflicting or missing records that block safe action. |
+
+The backend emits one typed `DecisionPresentation` for issue, recommendation, visual, result, questions, and details. The generic frontend renders that contract and does not branch on Scenario A–E. Adding a new package that matches an existing archetype must require verified data and solver mapping—not new scenario copy in the UI.
 
 ## 1. Operator contract
 
@@ -130,10 +155,12 @@ The operator must be able to answer these questions without reading generated pr
 
 ## 3. Information architecture
 
-The application has three destinations and no additional P0 routes.
+The application has an adaptive entry, a supporting assistant, and the existing decision/record destinations.
 
 ```text
 NourishOps
+├── Home                /
+├── Ask                 /assistant
 ├── Decision workspace  /runs/:runId
 ├── Compare             /runs/:runId/compare
 └── Audit               /runs/:runId/audit

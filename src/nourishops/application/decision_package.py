@@ -8,6 +8,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from nourishops.agents.contracts import AgentExplanation, AgentMetadata, AgentOutcome
 from nourishops.application.decisioning import SolverDescriptor
+from nourishops.application.presentation import (
+    DecisionPresentation,
+    build_decision_presentation,
+)
 
 
 class SolverView(BaseModel):
@@ -105,6 +109,7 @@ class DecisionBrief(BaseModel):
     evidence: list[EvidenceView]
     approval: ApprovalContract
     agent: AgentMetadata
+    presentation: DecisionPresentation
     synthetic: Literal[True]
 
 
@@ -304,5 +309,6 @@ def build_decision_brief(
         evidence=evidence,
         approval=approval,
         agent=agent_outcome.metadata if agent_outcome else agent_metadata,
+        presentation=build_decision_presentation(analysis, context),
         synthetic=True,
     )

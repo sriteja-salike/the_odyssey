@@ -11,7 +11,7 @@ import Dialog from "../components/Dialog";
 import NotFoundRun from "./NotFoundRun";
 import { letterFromRunId } from "../lib/run";
 import { useRunState, type Decision } from "../lib/runState";
-import { createRun, decideRun, evaluateRun, getRun, type LiveRun } from "../lib/liveApi";
+import { createRun, decideRun, evaluateRun, getRun, getWorkItems, type LiveRun, type WorkItem } from "../lib/liveApi";
 
 export default function DecisionWorkspace() {
   const { runId = "" } = useParams();
@@ -19,6 +19,7 @@ export default function DecisionWorkspace() {
   const letter = letterFromRunId(runId);
   const [state, setState] = useRunState(runId);
   const [liveRun, setLiveRun] = useState<LiveRun | null>(null);
+  const [workItem, setWorkItem] = useState<WorkItem | undefined>();
   const [error, setError] = useState("");
   const [confirmReset, setConfirmReset] = useState(false);
 
@@ -26,6 +27,7 @@ export default function DecisionWorkspace() {
     if (!letter) return;
     getRun(runId).then((run) => {
       setLiveRun(run);
+      getWorkItems().then((items) => setWorkItem(items.find((item) => item.case_key === run.scenario_key))).catch(() => undefined);
       const decision = run.decision ? {
         kind: run.decision.kind,
         actionId: run.decision.action_id,
@@ -80,7 +82,7 @@ export default function DecisionWorkspace() {
   return (
     <AppFrame runId={runId} letter={letter} active="decision" onStartClean={startClean}>
       {error && <div className="service-error" role="alert">{error}</div>}
-      {state.phase === "DRAFT" && <DraftWorkspace letter={letter} onAnalyze={startAnalysis} />}
+      {state.phase === "DRAFT" && <DraftWorkspace item={workItem} onAnalyze={startAnalysis} />}
       {state.phase === "ANALYZING" && <StageTrace />}
       {state.phase === "READY_FOR_REVIEW" && liveRun?.decision_brief && (
         <DecisionReview
@@ -96,7 +98,6 @@ export default function DecisionWorkspace() {
       {safeState && (
         <SafeStop
           status={state.phase as "ABSTAINED" | "NO_ACTION_REQUIRED" | "STALE" | "FAILED"}
-          letter={letter}
           brief={liveRun?.decision_brief ?? undefined}
           onStartClean={() => setConfirmReset(true)}
           onRetry={state.phase === "FAILED" || state.phase === "STALE" ? startAnalysis : undefined}

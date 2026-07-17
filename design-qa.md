@@ -1,56 +1,50 @@
-# Product Design QA — Core Food-Bank Decision Flow
+# Product Design QA — Adaptive Home and Decision Flow
 
 Date: 2026-07-17
 Branch: `codex/carbon-ui-redesign`
 
 ## Visual truth
 
-- Full-layout reference: `BUILD_CONTEXT/design-references/option-3-checklist-coach.png`
-- Focused-visual reference: `BUILD_CONTEXT/design-references/option-2-plain-language-visual.png`
-- Desktop implementation comparison: `BUILD_CONTEXT/design-qa/review-1440x1024.jpg`
-- Final focused visual confirmation: `BUILD_CONTEXT/design-qa/review-final-default.jpg`
-- Approved result: `BUILD_CONTEXT/design-qa/approved-1440x1024-final.jpg`
-- Mobile review: `BUILD_CONTEXT/design-qa/review-mobile-top.jpg`
-- Mobile abstention: `BUILD_CONTEXT/design-qa/abstained-390x844-full.jpg`
+- Selected adaptive Home reference: `BUILD_CONTEXT/design-references/adaptive-home-option-3.png`
+- Final desktop implementation: `BUILD_CONTEXT/design-references/adaptive-home-implementation.png`
+- Side-by-side comparison input: `BUILD_CONTEXT/design-references/adaptive-home-comparison.png`
+- Mobile implementation: `BUILD_CONTEXT/design-qa/adaptive-home-390x844.png`
+- Assistant implementation: `BUILD_CONTEXT/design-qa/adaptive-assistant-1440x1024.png`
+- Decision-flow references retained: `BUILD_CONTEXT/design-references/option-3-checklist-coach.png` and `BUILD_CONTEXT/design-references/option-2-plain-language-visual.png`
 
-The Option 3 reference and desktop implementation were inspected together in one comparison input. The Option 2 reference and implementation were then inspected together in a second comparison input. Option 3 governs the linear checklist, task hierarchy, and one-primary-action treatment. Option 2 governs only the compact plain-language chart and operational effect treatment. The reference's permanent `Today` sidebar was intentionally omitted because the approved Phase 1 contract requires no permanent right sidebar.
+The selected Home reference and final implementation were normalized into one 2880×1024 comparison input and inspected together. The implementation follows the reference's editorial greeting, large issue composer, persistent simulation statement, one Agent Briefing item, and restrained service palette. It intentionally omits the reference attachment control because this release has no attachment workflow; no nonfunctional control was imitated. The briefing contains more verified context than the sketch while preserving one primary action.
 
-## Verified states and viewports
+## User-flow verification
 
-| State | Viewport / check | Result |
-|---|---|---|
-| Draft | Desktop | One active Step 1 and one `Check impact` primary action. |
-| Ready for review | 1440×1024 | No horizontal overflow; `Review and approve` is visible at y=945–992. |
-| Ready for review | 390×844 | No horizontal overflow; linear task flow and stacked actions. |
-| Ready for review | Effective 720×512 (200% zoom equivalent) | No horizontal overflow; primary action remains present. |
-| Approved | 1440×1024 | Step 3 before/after visual is followed immediately by outcome feedback; no external action claim is explicit. |
-| Abstained | 390×844 | Source-conflict rows, Step 2 blocked, Step 3 unavailable, zero approval controls. |
-| Scenarios B–D | Desktop | Correct issue, recommendation, visual, numerical anchors, and one approval control for each. |
-| Offline fallback | Desktop | API unavailable creates a frozen offline run, displays `Offline verified`, analyzes, and renders the safe recommendation. |
-| Records | Desktop/mobile | Compare table and Audit route both render; Audit remains available on non-A mobile scenarios. |
+| Flow / state | Result |
+|---|---|
+| Home at 1440×1024 | One composer, three lightweight prompt examples, one briefing item, and one primary response action. No scenario picker or card-grid dashboard. |
+| Home at 390×844 | No horizontal overflow; simulation notice remains visible; bottom navigation has Home, Ask, and Records; briefing remains linear. |
+| Effective 200% zoom | No horizontal overflow at the reduced viewport. |
+| Composer → assistant | Example question opens `/assistant`, sends the initial question, and returns a verified answer with one matched case. |
+| Assistant → decision | `Review response` creates and evaluates the matching case, then opens the existing structured review route. |
+| Review → approval → result | Confirmation repeats action, quantity, cost, timing, and simulation consequence; approval produces `Action completed in simulation` and records outcome feedback. |
+| Safe abstention | The conflicting-records work item opens Step 1 with field-specific discrepancies, blocks Step 2, makes Step 3 unavailable, and renders zero approval controls. |
+| Offline fallback | Frozen work items, presentations, and assistant routing remain available without inventing quantities or permitting unverified custom previews. |
 
-## Interaction and accessibility checks
+## Contract and accessibility verification
 
-- Draft → impact check → ready for review → approval confirmation → simulated result completed.
-- Approval dialog receives initial focus on `Approve simulated action`; keyboard Enter behavior is covered by the interaction test.
-- Alternative selection requires a manager reason before approval.
-- Scenario E exposes no approval control.
-- Outcome feedback records successfully; recommendation-quality feedback stays behind its disclosure.
-- Testing Library and axe-core cover the draft and abstained structures, labels, headings, and dialog flow.
-- Charts have a plain-language summary, hidden chart semantics, and an expandable exact-value table.
-- Interaction targets are at least 44px; reduced-motion rules remain in effect.
-- Final browser check found zero console errors. Earlier session warnings were historical Carbon deprecation warnings from the replaced shell, not errors from the final build.
+- Home and chat consume semantic `WorkItem` and `DecisionPresentation` contracts; generic surfaces do not branch on Scenario A–E.
+- Frozen scenarios remain regression fixtures while five operational archetypes provide reusable skeletons.
+- The assistant uses assistant-ui thread/composer primitives but cannot approve or mutate a decision.
+- Quantitative visuals remain Recharts-based with plain-language summaries and expandable exact-value tables.
+- Testing Library and axe-core cover the core draft, review dialog, and abstention structures.
+- Final verification: 30 frontend tests, frontend typecheck, production build, Ruff, 87 backend tests plus 15 PostgreSQL integration tests.
+- Fresh browser checks found zero console errors or warnings in Home, the 200% equivalent, and final safe-abstention routing.
 
-## Findings and iteration history
+## Findings and fixes
 
-1. P1 — concise `useEffect` returned the browser's scroll result and caused a React cleanup crash. Fixed by making the effect explicitly return nothing.
-2. P1 — the review action initially fell below the 1024px viewport. Fixed by using the selected compact Option 2-style chart inside the completed step and tightening only the active recommendation spacing.
-3. P1 — Audit was hidden on Scenario E at 390px. Fixed by hiding only the Scenario A Compare link at the narrowest breakpoint.
-4. P1 — the approval modal initially focused Carbon's close icon. Fixed by scoping the primary-focus selector to form fields or the modal footer primary action.
-5. P1 — the approved chart repeated the baseline-risk summary. Fixed by mapping result-specific plain-language outcome copy and compacting completed steps so outcome feedback begins in the first viewport.
-6. P2 — Scenario E used an invalid `article[role=listitem]` combination. Fixed with neutral list-item containers; axe-core now reports no violations in the tested states.
-7. P2 — quantitative reference labels clipped at chart edges. Fixed by centering the verified threshold label on the reference line.
-8. P2 — Carbon's Records menu required an explicit accessible name. Added `aria-label="Records"`; the rebuilt app has zero new browser console errors.
+1. P1 — the first implementation centered and vertically stretched the Home hierarchy relative to the selected reference. Fixed by moving the simulation statement into the header, left-aligning the desktop hero, enlarging the composer, and bringing the briefing into the first viewport.
+2. P1 — scenario fixtures originally risked becoming the navigation model. Fixed by replacing named scenario selection with a verified adaptive briefing and keeping demo fixtures under the overflow menu.
+3. P1 — Scenario E exposed generic `Record` labels because the presentation mapper read the wrong field key. Fixed by mapping `field_name` to Shipment status, Expected arrival, and Shipment quantity with plain-language missing/conflict messages.
+4. P2 — Scenario E conflict rows could share React keys. Fixed with stable field/source/index keys; the final browser pass has no duplicate-key warning.
+5. P2 — the mobile navigation grid still assumed the previous number of destinations. Fixed to allocate all visible destinations without clipping or horizontal scroll.
+6. P2 — a simulated approval handoff briefly showed historical hot-reload errors after a container rebuild. A clean reload and full repeated journey produced zero new console errors; no runtime defect remained.
 
 No P0, P1, or P2 findings remain open.
 

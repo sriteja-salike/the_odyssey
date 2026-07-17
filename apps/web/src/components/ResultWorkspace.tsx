@@ -54,7 +54,7 @@ function ApprovedResult({ letter, runId, decision, execution, feedbackRecorded, 
               <div><dt>Simulated cost</dt><dd>{usd(execution?.cost_usd ?? action?.cost_usd ?? "0")}</dd></div>
               <div><dt>External action</dt><dd>Not performed</dd></div>
             </dl>
-            <DecisionVisual letter={letter} result compact />
+            {brief && <DecisionVisual presentation={brief.presentation} result compact />}
           </div>
         </li>
       </ol>

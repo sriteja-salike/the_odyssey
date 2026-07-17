@@ -27,6 +27,7 @@ import {
   type ScenarioLetter,
 } from "./api";
 import type { ActionEvaluation, Risk } from "../types/golden";
+import { buildDecisionPresentation } from "./decisionPresentation";
 
 const ZERO_HASH = "0".repeat(64);
 const scenarioKey = (letter: ScenarioLetter) => `scenario_${letter.toLowerCase()}`;
@@ -229,6 +230,7 @@ function buildBrief(letter: ScenarioLetter, runId: string): DecisionBrief {
       external_writes_allowed: false,
     },
     agent: agent("DECISION_ORCHESTRATOR"),
+    presentation: buildDecisionPresentation(letter),
     synthetic: true,
   };
 }

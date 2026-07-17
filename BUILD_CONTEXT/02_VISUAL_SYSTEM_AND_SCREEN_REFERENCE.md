@@ -7,20 +7,21 @@
 
 ---
 
-## 0. Phase 1 selected hybrid direction (normative override)
+## 0. Phase 1 selected adaptive direction (normative override)
 
-The Phase 1 visual truth is a hybrid chosen by the user:
+The Phase 1 visual truth combines the user-selected adaptive Home with the selected decision flow:
 
+- **Adaptive Home reference:** `BUILD_CONTEXT/design-references/adaptive-home-option-3.png`
 - **Primary structure:** `BUILD_CONTEXT/design-references/option-3-checklist-coach.png`
 - **Focused explanation treatment:** `BUILD_CONTEXT/design-references/option-2-plain-language-visual.png`
 
-Option 3 controls the full-page hierarchy: a simple service shell, a vertical three-step journey, one active section, clear completed/current/pending states, and a single dominant action. Option 2 contributes only the compact, plain-language decision visual inside the active step. This override replaces the older persistent recommendation rail, permanent sidebar, dark console header, and global Decision Guide treatment described later in this document.
+Adaptive Home Option 3 controls the entry hierarchy: editorial greeting, large composer, one briefing item, and no component-dump dashboard. Decision Option 3 controls the full decision hierarchy: a simple service shell, a vertical three-step journey, one active section, clear completed/current/pending states, and a single dominant action. Decision Option 2 contributes only the compact, plain-language visual inside the active step. This override replaces the older persistent recommendation rail, permanent sidebar, dark console header, global Decision Guide, and scenario-picker-first treatment described later in this document.
 
 The target user is Jordan, a frequently interrupted food-bank operations coordinator. The page should feel like a calm task checklist, not a planning dashboard, analyst console, AI chat, or executive command center.
 
 ### 0.1 Phase 1 visual system
 
-- **Foundation:** IBM Carbon components and icons, IBM Plex Sans/Mono, Recharts for verified quantitative comparisons.
+- **Foundation:** IBM Carbon components and icons, assistant-ui primitives for the supporting chat thread, IBM Plex Sans/Mono for interface text, Newsreader for calm display headings, and Recharts for verified quantitative comparisons.
 - **Palette:** paper white `#fbfaf7`, warm raised surface `#f5f2eb`, charcoal `#25231f`, deep blue action `#174b7a`, ochre attention `#9a6500`, forest completion `#2f6b45`, restrained red breach `#a63a3a`.
 - **Shape:** 8px default radius and 12px emphasized radius; status tags may remain pill-shaped.
 - **Elevation:** flat page and task surfaces; subtle shadow only for dialogs and menus.
@@ -30,11 +31,13 @@ The target user is Jordan, a frequently interrupted food-bank operations coordin
 ### 0.2 Screen hierarchy
 
 1. Nourish Ops shell and persistent simulation notice.
-2. Plain-language issue label, headline, and one-sentence explanation.
-3. Three-step task journey.
+2. On Home: greeting, composer, lightweight prompt examples, then one Agent Briefing item.
+3. In a decision: plain-language issue label, headline, one-sentence explanation, and three-step journey.
 4. At most one compact visual (approximately 120–160px high) in the current/completed issue step.
 5. One recommended response and one primary action.
 6. Alternatives, rationale, evidence, assumptions, and technical context only through labeled disclosures.
+
+The assistant has a conventional open-source thread/composer structure but remains a separate focused route. Its verified case context and `Review response` handoff are always visible; there is no chat approval control.
 
 ### 0.3 Scenario visual mapping
 
@@ -56,7 +59,7 @@ All charts have a plain-language summary and an expandable semantic table. There
 | Selected displayed option | Full redesign · Carbon foundation |
 | Selected direction name | Checklist Coach with focused operational visual |
 | Selection feedback | Build around Option 3's simple checklist for a food-bank employee, retaining one useful Option 2-style visual. Use open-source Carbon patterns wherever possible and custom-build only domain-specific presentation. |
-| Final reference asset paths | `BUILD_CONTEXT/design-references/option-3-checklist-coach.png`; `BUILD_CONTEXT/design-references/option-2-plain-language-visual.png`; implementation QA captures in `BUILD_CONTEXT/design-qa/` |
+| Final reference asset paths | `BUILD_CONTEXT/design-references/adaptive-home-option-3.png`; `BUILD_CONTEXT/design-references/option-3-checklist-coach.png`; `BUILD_CONTEXT/design-references/option-2-plain-language-visual.png`; implementation QA captures in `BUILD_CONTEXT/design-qa/` |
 | Approved by | User (2026-07-17, persona-led full redesign) |
 
 The original ideation moved from Control Desk to Clinical Calm. The user then explicitly requested a complete redesign built smartly on an open-source professional UI. **Operational Dossier** retains the calm, humane intent while adopting IBM Carbon for controls, dialogs, navigation, progress, tables, notifications, accessibility behavior, and IBM Plex typography. Custom work is limited to the domain-specific risk narrative, recommendation rail, projection, before/after outcome, and evidence compositions.

@@ -65,6 +65,71 @@ export interface DecisionRationale {
   simulation_only: true;
 }
 
+export interface DecisionVisualDatum {
+  label: string;
+  value: string;
+  formatted_value: string;
+  tone: "attention" | "positive" | "neutral";
+}
+
+export interface DecisionConflictDatum {
+  field_label: string;
+  message: string;
+  sources: string[];
+  observed_values: string[];
+}
+
+export interface DecisionVisualPresentation {
+  kind: "coverage" | "capacity" | "mismatch" | "budget" | "conflict";
+  title: string;
+  summary: string;
+  unit: "weeks" | "lb" | "usd" | "records";
+  data: DecisionVisualDatum[];
+  reference_value: string | null;
+  reference_label: string | null;
+  conflicts: DecisionConflictDatum[];
+}
+
+export interface DecisionPresentation {
+  schema_version: "decision-presentation/1.0.0";
+  archetype: "INBOUND_DISRUPTION" | "PERISHABLE_CAPACITY" | "DONATION_DISPOSITION" | "RESOURCE_TRADEOFF" | "DATA_RECONCILIATION";
+  issue: { label: string; title: string; summary: string };
+  recommendation: null | {
+    title: string;
+    quantity_label: string;
+    cost_label: string;
+    timing_label: string | null;
+    effect: string;
+    caution: string | null;
+  };
+  visual: DecisionVisualPresentation;
+  result_visual: DecisionVisualPresentation | null;
+  detail_facts: { label: string; value: string }[];
+  suggested_questions: string[];
+}
+
+export interface WorkItem {
+  schema_version: "work-item/1.0.0";
+  work_item_id: string;
+  case_key: string;
+  state: "NEEDS_REVIEW" | "INFORMATION_NEEDED" | "NO_ACTION_REQUIRED";
+  urgency: "NOW" | "SOON" | "ROUTINE";
+  due_label: string | null;
+  source_count: number;
+  presentation: DecisionPresentation;
+  primary_action_label: string;
+  synthetic: true;
+}
+
+export interface OperationsAssistantResponse {
+  schema_version: "operations-assistant-response/1.0.0";
+  answer: string;
+  work_item: WorkItem;
+  suggested_questions: string[];
+  authority_note: string;
+  synthetic: true;
+}
+
 export interface DecisionBrief {
   schema_version: "decision-brief/1.0.0";
   run_id: string;
@@ -112,6 +177,7 @@ export interface DecisionBrief {
     external_writes_allowed: false;
   };
   agent: AgentMetadata;
+  presentation: DecisionPresentation;
   synthetic: true;
 }
 

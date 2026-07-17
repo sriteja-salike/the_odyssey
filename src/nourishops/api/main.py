@@ -18,6 +18,7 @@ from nourishops.api.models import (
     DecisionRequest,
     FeedbackRequest,
     OutcomeFeedbackRequest,
+    OperationsAssistantRequest,
 )
 from nourishops.agents import build_decision_agent, build_decision_reviewer
 from nourishops.application.service import ApplicationError, NourishOpsService
@@ -145,6 +146,16 @@ def capabilities():
 @app.get("/api/v1/scenarios")
 def scenarios():
     return envelope(store.list_scenarios())
+
+
+@app.get("/api/v1/work-items")
+def work_items():
+    return envelope(service.list_work_items())
+
+
+@app.post("/api/v1/operations-assistant/messages")
+def operations_assistant(request: OperationsAssistantRequest):
+    return envelope(service.answer_operations_question(request.message))
 
 
 @app.post("/api/v1/runs", status_code=201)

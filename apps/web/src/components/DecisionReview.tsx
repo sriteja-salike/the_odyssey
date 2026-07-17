@@ -16,8 +16,7 @@ import {
   StarFilled,
   WarningAlt,
 } from "@carbon/icons-react";
-import { getActionMap, getGolden, type ActionRecord, type ScenarioLetter } from "../lib/api";
-import { buildDecisionPresentation } from "../lib/decisionPresentation";
+import { getActionMap, type ActionRecord, type ScenarioLetter } from "../lib/api";
 import { previewAction, type DecisionBrief, type LiveRun } from "../lib/liveApi";
 import type { Decision, RunState } from "../lib/runState";
 import { dateShort, lb, titleCase, usd } from "../lib/format";
@@ -36,10 +35,10 @@ interface Props {
   onDecision: (decision: Decision) => Promise<void>;
 }
 
-export default function DecisionReview({ runId, letter, state, setState, brief, knowledge, onDecision }: Props) {
+export default function DecisionReview({ runId, state, setState, brief, knowledge, onDecision }: Props) {
   const [dialog, setDialog] = useState<DialogKind>(null);
   const [showOptions, setShowOptions] = useState(false);
-  const presentation = buildDecisionPresentation(letter, brief);
+  const presentation = brief.presentation;
   const recommended = brief.recommendation;
   if (!recommended || !presentation.recommendation) return null;
 
@@ -50,8 +49,13 @@ export default function DecisionReview({ runId, letter, state, setState, brief, 
   const approvalReady = !nonDefault || reason.trim().length > 0;
   const selectedCost = state.selection?.previewCostUsd ?? selected.cost_usd;
   const catalog = getActionMap(brief.scenario_id)[selected.action_id];
-  const goldenRecommendation = getGolden(letter).recommended_action;
-  const arrival = catalog?.arrival_week_start || goldenRecommendation?.arrival_week_start || "";
+  const arrival = catalog?.arrival_week_start || "";
+  const timing = selected.action_id === recommended.action.action_id
+    ? presentation.recommendation.timing_label
+    : arrival ? dateShort(arrival) : null;
+  const selectedTitle = selected.action_id === recommended.action.action_id
+    ? presentation.recommendation.title
+    : plainActionTitle(selected);
   const selectedEffect = selected.action_id === recommended.action.action_id
     ? presentation.recommendation.effect
     : "This response will be rechecked against the same verified constraints before approval.";
@@ -105,7 +109,7 @@ export default function DecisionReview({ runId, letter, state, setState, brief, 
           <div className="task-step__marker"><CheckmarkFilled size={20} aria-hidden /><span className="visually-hidden">Complete</span></div>
           <div className="task-step__body">
             <div className="task-step__title"><div><span>Step 1</span><h2>Understand the issue</h2></div><Tag type="green">Complete</Tag></div>
-            <DecisionVisual letter={letter} compact />
+            <DecisionVisual presentation={presentation} compact />
           </div>
         </li>
 
@@ -116,12 +120,12 @@ export default function DecisionReview({ runId, letter, state, setState, brief, 
 
             <section className="recommended-choice" aria-labelledby="recommended-title">
               <div className="recommended-choice__label"><StarFilled size={20} aria-hidden /> Best next step</div>
-              <h3 id="recommended-title">{selected.display_name}</h3>
+              <h3 id="recommended-title">{selectedTitle}</h3>
               {nonDefault && <Tag type="purple" size="sm">Manager-selected response</Tag>}
               <dl className="choice-facts">
                 <div><dt>Quantity</dt><dd>{lb(state.selection?.quantityLb ?? selected.requested_quantity_lb)}</dd></div>
                 <div><dt>Simulated cost</dt><dd>{usd(selectedCost)}</dd></div>
-                {arrival && <div><dt>Timing</dt><dd>{dateShort(arrival)}</dd></div>}
+                {timing && <div><dt>Timing</dt><dd>{timing}</dd></div>}
               </dl>
               <p className="choice-effect"><CheckmarkFilled size={20} aria-hidden /> {selectedEffect}</p>
               {presentation.recommendation.caution && selected.action_id === recommended.action.action_id && (
@@ -160,7 +164,7 @@ export default function DecisionReview({ runId, letter, state, setState, brief, 
                 <div className="other-options" aria-label="Other responses">
                   {brief.alternatives.map((alternative) => (
                     <article key={alternative.evaluated_action_id} className={alternative.action_id === selected.action_id ? "is-selected" : undefined}>
-                      <div><strong>{alternative.display_name}</strong><span>{lb(alternative.requested_quantity_lb)} · {usd(alternative.cost_usd)}</span></div>
+                      <div><strong>{plainActionTitle(alternative)}</strong><span>{lb(alternative.requested_quantity_lb)} · {usd(alternative.cost_usd)}</span></div>
                       <Button kind={alternative.action_id === selected.action_id ? "tertiary" : "secondary"} size="sm" onClick={() => chooseAction(alternative.action_id)}>
                         {alternative.action_id === selected.action_id ? "Selected" : "Choose"}
                       </Button>
@@ -212,10 +216,10 @@ export default function DecisionReview({ runId, letter, state, setState, brief, 
         <Dialog title="Apply this action to the simulation?" primaryLabel="Approve simulated action" onClose={() => setDialog(null)} onPrimary={() => { setDialog(null); void approve(); }}>
           <p>This updates only the current synthetic run. It will not place an order, reserve food, contact a donor, or notify another organization.</p>
           <dl className="confirmation-facts">
-            <div><dt>Action</dt><dd>{selected.display_name}</dd></div>
+            <div><dt>Action</dt><dd>{selectedTitle}</dd></div>
             <div><dt>Quantity</dt><dd>{lb(state.selection?.quantityLb ?? selected.requested_quantity_lb)}</dd></div>
             <div><dt>Simulated cost</dt><dd>{usd(selectedCost)}</dd></div>
-            {arrival && <div><dt>Timing</dt><dd>{dateShort(arrival)}</dd></div>}
+            {timing && <div><dt>Timing</dt><dd>{timing}</dd></div>}
             {nonDefault && <div><dt>Manager reason</dt><dd>{reason}</dd></div>}
           </dl>
         </Dialog>
@@ -230,6 +234,21 @@ export default function DecisionReview({ runId, letter, state, setState, brief, 
       )}
     </div>
   );
+}
+
+function plainActionTitle(action: DecisionBrief["alternatives"][number]): string {
+  const category = titleCase((action.category_id ?? "operations").replaceAll("_", " ").toLowerCase());
+  const amount = lb(action.requested_quantity_lb);
+  return ({
+    PURCHASE: `Purchase ${amount} of ${category.toLowerCase()}`,
+    REQUEST_TRANSFER: `Request a transfer of ${amount} of ${category.toLowerCase()}`,
+    TARGETED_DONOR_REQUEST: `Request ${amount} of ${category.toLowerCase()} from donors`,
+    PARTIAL_ACCEPT: `Accept ${amount} of the ${category.toLowerCase()} offer`,
+    ACCEPT_DONATION: `Accept the ${category.toLowerCase()} offer`,
+    REDIRECT_DONATION: `Redirect the ${category.toLowerCase()} offer to a partner food bank`,
+    DECLINE_DONATION: `Decline the ${category.toLowerCase()} offer`,
+    MONITOR: `Continue monitoring ${category.toLowerCase()}`,
+  } as Record<string, string>)[action.action_type] ?? action.display_name;
 }
 
 function ReasonDialog({ mode, onClose, onConfirm }: { mode: "reject" | "defer"; onClose: () => void; onConfirm: (value: string) => void }) {

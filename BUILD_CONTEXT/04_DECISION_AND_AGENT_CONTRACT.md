@@ -27,6 +27,9 @@ The words **MUST**, **MUST NOT**, **SHOULD**, and **MAY** are normative. A golde
 8. Manager-decision writes originate only from the trusted UI and backend. They are never an LLM-callable tool.
 9. With the same scenario snapshot and ruleset, live-LLM and offline modes MUST return identical normalized facts, projections, risks, candidate actions, feasibility, scores, ranks, recommendation ID, confidence, and before/after metrics. Only explanatory prose and an “AI mode” label may differ.
 10. All displayed outcomes are synthetic or simulated.
+11. Home work items are deterministic projections of the same frozen scenario packages and solver outputs used by a run. Listing work items MUST NOT create a run, invoke an LLM, or expose a manager approval action.
+12. The operations assistant is read-only. It may select a verified work item, explain its typed `DecisionPresentation`, and return a route hint; it MUST NOT approve, reject, defer, edit quantity, write feedback, create an uncatalogued action, or replace the decision confirmation endpoint.
+13. Scenario letters and fixture-specific names are regression identities only. Operator-facing copy is produced by semantic presentation archetype and verified fields.
 
 ### 1.1 Frozen enums
 
