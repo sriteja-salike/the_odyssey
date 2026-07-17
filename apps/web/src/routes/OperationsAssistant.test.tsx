@@ -11,14 +11,30 @@ import OperationsAssistant from "./OperationsAssistant";
 
 const mocks = vi.hoisted(() => ({
   askOperationsAssistant: vi.fn(),
+  getWorkItems: vi.fn(),
   startWorkItem: vi.fn(),
 }));
 
 vi.mock("../lib/liveApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../lib/liveApi")>()),
   askOperationsAssistant: mocks.askOperationsAssistant,
+  getWorkItems: mocks.getWorkItems,
   startWorkItem: mocks.startWorkItem,
 }));
+
+const proteinItem: WorkItem = {
+  schema_version: "work-item/1.0.0",
+  work_item_id: "SCN-A-TEST",
+  case_key: "scenario_a",
+  state: "NEEDS_REVIEW",
+  urgency: "SOON",
+  due_label: "Review by Aug 10",
+  source_count: 7,
+  connected_sources: [{ source_id: "warehouse-wms", display_name: "Warehouse management system", source_kind: "CURRENT_KNOWLEDGE" }],
+  presentation: buildDecisionPresentation("A"),
+  primary_action_label: "Ask agent to review",
+  synthetic: true,
+};
 
 const item: WorkItem = {
   schema_version: "work-item/1.0.0",
@@ -67,6 +83,8 @@ function response(answer: string): OperationsAssistantResponse {
 beforeEach(() => {
   sessionStorage.clear();
   mocks.askOperationsAssistant.mockReset();
+  mocks.getWorkItems.mockReset();
+  mocks.getWorkItems.mockResolvedValue([proteinItem]);
   mocks.startWorkItem.mockReset();
 });
 
@@ -81,6 +99,66 @@ describe("operations agent conversation", () => {
     expect(await screen.findByText(/USDA Protein \(PO-4471\)/)).toBeInTheDocument();
     expect(screen.getByText(/Prairie Farms/)).toBeInTheDocument();
     expect(mocks.askOperationsAssistant).not.toHaveBeenCalled();
+  });
+
+  it("runs the guided two-turn demo with a thinking state and decision handoff", async () => {
+    let resolveWorkItems!: (items: WorkItem[]) => void;
+    mocks.getWorkItems.mockReturnValueOnce(new Promise((resolve) => { resolveWorkItems = resolve; }));
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={["/assistant?new=1"]}>
+        <Routes><Route path="/assistant" element={<OperationsAssistant />} /></Routes>
+      </MemoryRouter>,
+    );
+
+    const input = screen.getByRole("textbox", { name: "Ask about operations" });
+    await user.type(input, "What needs my attention first?");
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    expect(await screen.findByText("Checking inventory, deliveries, and available responses")).toBeInTheDocument();
+    resolveWorkItems([proteinItem]);
+    expect(await screen.findByText(/Next question to ask: “Why is the protein shortage urgent\?”/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: proteinItem.presentation.issue.title })).toBeInTheDocument();
+
+    await user.type(input, "Why is the protein shortage urgent?");
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    expect(await screen.findByText(/purchasing 15,000 lb for \$12,750/)).toBeInTheDocument();
+    expect(screen.getByText("Guided demo review completed")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Open agent recommendation/ })).toBeInTheDocument();
+    expect(mocks.askOperationsAssistant).not.toHaveBeenCalled();
+  });
+
+  it("hands an unscripted follow-up to the live agent with the guided context", async () => {
+    mocks.askOperationsAssistant.mockResolvedValue({
+      ...response("The live agent compared cost, arrival timing, and coverage risk."),
+      response_type: "DECISION",
+      work_item: proteinItem,
+    });
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={["/assistant?new=1"]}>
+        <Routes><Route path="/assistant" element={<OperationsAssistant />} /></Routes>
+      </MemoryRouter>,
+    );
+
+    const input = screen.getByRole("textbox", { name: "Ask about operations" });
+    await user.type(input, "What needs my attention first?");
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+    expect(await screen.findByText(/Next question to ask/)).toBeInTheDocument();
+
+    await user.type(input, "Which tradeoffs should I consider?");
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+    expect(await screen.findByText("The live agent compared cost, arrival timing, and coverage risk.")).toBeInTheDocument();
+
+    expect(mocks.askOperationsAssistant).toHaveBeenCalledTimes(1);
+    const [messages, currentId] = mocks.askOperationsAssistant.mock.calls[0];
+    expect(messages).toEqual(expect.arrayContaining([
+      { role: "user", content: "What needs my attention first?" },
+      expect.objectContaining({ role: "assistant", content: expect.stringContaining("10,000 lb USDA protein shipment") }),
+      { role: "user", content: "Which tradeoffs should I consider?" },
+    ]));
+    expect(currentId).toBe("SCN-A-TEST");
   });
 
   it("sends full history on follow-up and exposes agent provenance", async () => {

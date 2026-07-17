@@ -71,6 +71,18 @@ def test_offline_agent_routes_expected_shipments_to_inbound_work() -> None:
     assert outcome.selection.work_item_id == "SCN-A"
 
 
+def test_offline_agent_preserves_context_for_tradeoff_follow_up() -> None:
+    outcome = OfflineOperationsAgent().route(
+        [{"role": "user", "content": "Which tradeoffs should I consider before approving?"}],
+        work_items(),
+        current_work_item_id="SCN-A",
+    )
+
+    assert outcome.selection.response_type == "ANSWER"
+    assert outcome.selection.answer_style == "TRADEOFFS"
+    assert outcome.selection.work_item_id == "SCN-A"
+
+
 def test_live_operations_agent_uses_the_read_only_work_item_tool() -> None:
     output = {
         "response_type": "SAFE_STOP",

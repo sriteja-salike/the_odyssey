@@ -119,3 +119,14 @@ def test_connection_answer_lists_verified_source_registry() -> None:
     )
     assert "Warehouse management system" in answer
     assert "read-only demo connections" in answer
+
+
+def test_tradeoff_answer_uses_verified_recommendation_facts() -> None:
+    item = build_work_item("scenario_a", _analysis("A"), _context("A"))
+    answer = NourishOpsService._render_operations_answer(
+        "TRADEOFFS", item.model_dump(mode="json"), [item.model_dump(mode="json")],
+    )
+
+    assert "15,000 lb" in answer
+    assert "$12,750" in answer
+    assert "cost, timing, and remaining operational risk" in answer

@@ -294,6 +294,16 @@ class NourishOpsService:
                 f"The agent-matched response to review is {recommendation['title']}. "
                 f"{recommendation['effect']}"
             )
+        if style == "TRADEOFFS" and recommendation:
+            timing = f", {recommendation['timing_label'].lower()}" if recommendation.get("timing_label") else ""
+            caution = f" {recommendation['caution']}" if recommendation.get("caution") else ""
+            return (
+                "Consider the cost, timing, and remaining operational risk before approving. "
+                f"The response to review is {recommendation['title']} "
+                f"({recommendation['quantity_label']}, {recommendation['cost_label']}{timing}). "
+                f"{recommendation['effect']}{caution} Open the agent recommendation to compare "
+                "the evaluated responses and their evidence."
+            )
         if recommendation:
             return f"{issue['title']} {issue['summary']}"
         return (

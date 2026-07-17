@@ -9,23 +9,42 @@ const FOLLOW_UPS = [
   "What are the expected shipments?",
 ];
 
+const PROTEIN_URGENCY = {
+  answer: [
+    "It is urgent for three practical reasons:",
+    "",
+    "1. Safety threshold — protein coverage reaches 1.3 weeks around Aug 10, below the 1.5-week minimum.",
+    "2. Timing — the delayed 10,000 lb USDA shipment is not expected until Aug 17, so waiting does not cover the gap.",
+    "3. A safe response is available — the decision agent compared the evaluated options and recommends purchasing 15,000 lb for $12,750, arriving Aug 10. That raises coverage from 1.3 to 3.0 weeks.",
+    "",
+    "You still make the final decision. Open the agent recommendation to compare the response, review its evidence, and approve only if it is right for your operation.",
+  ].join("\n"),
+  suggested: [
+    "What are the expected shipments?",
+    "What other responses were considered?",
+    "What information was checked?",
+  ],
+};
+
 const CANNED: Record<string, { answer: string; suggested?: string[] }> = {
   "what needs my attention first": {
     answer: [
-      "Three things need your attention today, in priority order:",
+      "Start with the protein shortage. It has the nearest deadline and the clearest effect on households served.",
       "",
-      "1. Protein is about to fall below the safe minimum. A delayed USDA shipment leaves protein at ~1.3 weeks of supply by Aug 10 — under the 1.5-week floor. Nearest deadline, review by Aug 10.",
-      "2. A short-life produce offer won't fit in cold storage. Accepting the full 50,000 lb offer would exceed the 40,000 lb refrigerated limit by 10,000 lb.",
-      "3. A snack donation doesn't match current category needs and may need redirecting to a partner food bank.",
+      "A 10,000 lb USDA protein shipment moved from Aug 3 to Aug 17. Without another response, protein coverage falls to 1.3 weeks around Aug 10 — below the 1.5-week safety minimum.",
       "",
-      "Start with the protein shortage — it has the closest deadline and the clearest impact on households served.",
+      "I checked the current inventory, inbound delivery, distribution history, policy, and available response records. The issue needs review by Aug 10, but no action has been taken.",
+      "",
+      "Next question to ask: “Why is the protein shortage urgent?”",
     ].join("\n"),
     suggested: [
-      "Are any deliveries at risk?",
+      "Why is the protein shortage urgent?",
       "What are the expected shipments?",
       "Show inventory concerns",
     ],
   },
+  "why is the protein shortage urgent": PROTEIN_URGENCY,
+  "tell me more about protein": PROTEIN_URGENCY,
   "are any deliveries at risk": {
     answer: [
       "Yes — one inbound delivery is currently at risk:",

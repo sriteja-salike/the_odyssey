@@ -14,6 +14,7 @@ import ProductShell from "../components/ProductShell";
 import ConnectedSources from "../components/ConnectedSources";
 import {
   askOperationsAssistant,
+  getWorkItems,
   recentRunForCase,
   startWorkItem,
   type OperationsAssistantResponse,
@@ -23,6 +24,7 @@ import type { OperationsAssistantMessage } from "../lib/liveTypes";
 
 const WELCOME = "Tell me what changed or ask what needs attention. I’ll match your question to verified operations data, explain the decision, and keep approval with you.";
 const SESSION_KEY = "nourishops:operations-assistant-session";
+const DEMO_THINKING_MS = typeof navigator !== "undefined" && navigator.userAgent.includes("jsdom") ? 0 : 1400;
 const seedRequests = new Map<string, Promise<OperationsAssistantResponse>>();
 
 type PersistedMessage = {
@@ -78,7 +80,7 @@ export default function OperationsAssistant() {
           <div className="assistant-layout">
             <section className="assistant-thread assistant-loading-thread" aria-label="Conversation loading">
               <div className="assistant-message assistant-message--user"><span>You</span><p>{prompt}</p></div>
-              <div className="assistant-message assistant-message--agent"><span>ShareStack decision agent</span><p>Reading the relevant records and checking whether this needs a decision…</p></div>
+              <ThinkingMessage />
             </section>
             <aside className="assistant-context"><span>Current decision</span><h2>Matching this to the right situation</h2><p>The related issue, information checked, and next action will appear here.</p></aside>
           </div>
@@ -112,6 +114,7 @@ function AssistantThread({
   const navigate = useNavigate();
   const [response, setResponse] = useState<OperationsAssistantResponse | null>(seed);
   const [opening, setOpening] = useState(false);
+  const [thinking, setThinking] = useState(false);
   const [error, setError] = useState("");
   const contextItemId = useRef(seed?.work_item?.work_item_id);
 
@@ -123,6 +126,7 @@ function AssistantThread({
   const adapter = useMemo<ChatModelAdapter>(() => ({
     async run({ messages, abortSignal }) {
       setError("");
+      setThinking(true);
       const conversation: OperationsAssistantMessage[] = messages
         .filter((message) => message.role === "user" || message.role === "assistant")
         .map((message) => ({
@@ -131,21 +135,11 @@ function AssistantThread({
         }))
         .filter((message) => message.content.length > 0);
       const lastUser = [...conversation].reverse().find((message) => message.role === "user");
-      const canned = lastUser ? getCannedAnswer(lastUser.content) : null;
-      if (canned) {
-        contextItemId.current = undefined;
-        setResponse(canned);
-        writeSession({
-          messages: [
-            ...conversation.map((message) => textMessage(message.role, message.content)),
-            textMessage("assistant", canned.answer),
-          ],
-          response: canned,
-        });
-        return { content: [{ type: "text", text: canned.answer }] };
-      }
+      const startedAt = Date.now();
       try {
-        const next = await askOperationsAssistant(conversation, contextItemId.current);
+        const guided = lastUser ? await guidedDemoResponse(lastUser.content) : null;
+        const next = guided ?? await askOperationsAssistant(conversation, contextItemId.current);
+        if (guided) await waitForDemoThinking(startedAt);
         if (abortSignal.aborted) throw new DOMException("Aborted", "AbortError");
         contextItemId.current = next.work_item?.work_item_id;
         setResponse(next);
@@ -160,6 +154,8 @@ function AssistantThread({
       } catch (cause) {
         if (!abortSignal.aborted) setError((cause as Error).message);
         throw cause;
+      } finally {
+        setThinking(false);
       }
     },
   }), []);
@@ -221,6 +217,7 @@ function AssistantThread({
           <ThreadPrimitive.Root className="assistant-thread">
             <ThreadPrimitive.Viewport className="assistant-thread__viewport">
               <ThreadPrimitive.Messages components={{ UserMessage, AssistantMessage }} />
+              {thinking && <ThinkingMessage />}
               <ThreadPrimitive.ViewportFooter className="assistant-thread__footer">
                 <ThreadPrimitive.ScrollToBottom className="assistant-scroll" aria-label="Scroll to latest message"><ArrowDown size={18} /></ThreadPrimitive.ScrollToBottom>
                 <ComposerPrimitive.Root className="assistant-composer">
@@ -308,6 +305,18 @@ function AssistantMessage() {
   );
 }
 
+function ThinkingMessage() {
+  return (
+    <div className="assistant-message assistant-message--agent assistant-thinking" role="status" aria-live="polite">
+      <span>ShareStack decision agent</span>
+      <div>
+        <p>Checking inventory, deliveries, and available responses</p>
+        <span className="assistant-thinking__dots" aria-hidden="true"><i /><i /><i /></span>
+      </div>
+    </div>
+  );
+}
+
 function messageText(message: unknown): string {
   const content = (message as { content?: { type: string; text?: string }[] } | undefined)?.content ?? [];
   return content.filter((part) => part.type === "text").map((part) => part.text ?? "").join("\n").trim();
@@ -335,17 +344,52 @@ function writeSession(session: PersistedSession) {
 }
 
 function seedRequest(prompt: string): Promise<OperationsAssistantResponse> {
-  const canned = getCannedAnswer(prompt);
-  if (canned) return Promise.resolve(canned);
   const existing = seedRequests.get(prompt);
   if (existing) return existing;
-  const request = askOperationsAssistant([{ role: "user", content: prompt }]);
+  const request = (async () => {
+    const startedAt = Date.now();
+    const guided = await guidedDemoResponse(prompt);
+    if (guided) {
+      await waitForDemoThinking(startedAt);
+      return guided;
+    }
+    return askOperationsAssistant([{ role: "user", content: prompt }]);
+  })();
   seedRequests.set(prompt, request);
   void request.then(
     () => seedRequests.delete(prompt),
     () => seedRequests.delete(prompt),
   );
   return request;
+}
+
+async function guidedDemoResponse(prompt: string): Promise<OperationsAssistantResponse | null> {
+  const canned = getCannedAnswer(prompt);
+  if (!canned || !isProteinDemoPrompt(prompt)) return canned;
+  try {
+    const workItem = (await getWorkItems()).find((item) => item.case_key === "scenario_a") ?? null;
+    if (!workItem) return canned;
+    return {
+      ...canned,
+      response_type: "DECISION",
+      work_item: workItem,
+    };
+  } catch {
+    // The guided explanation remains available if the work-item service is unavailable.
+    return canned;
+  }
+}
+
+function isProteinDemoPrompt(prompt: string) {
+  const normalized = prompt.trim().toLowerCase().replace(/\s+/g, " ").replace(/[?.!]+$/, "");
+  return normalized === "what needs my attention first"
+    || normalized === "why is the protein shortage urgent"
+    || normalized === "tell me more about protein";
+}
+
+async function waitForDemoThinking(startedAt: number) {
+  const remaining = DEMO_THINKING_MS - (Date.now() - startedAt);
+  if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
 }
 
 function responseLabel(response: OperationsAssistantResponse): string {
@@ -359,6 +403,9 @@ function responseLabel(response: OperationsAssistantResponse): string {
 
 function agentModeLabel(response: OperationsAssistantResponse): string {
   const { agent } = response;
+  if (response.guardrails.facts === "Hardcoded synthetic demonstration data") {
+    return "Guided demo review completed";
+  }
   if (agent.effective_mode === "live" && agent.status === "live_verified") {
     return "Decision agent completed its review";
   }
