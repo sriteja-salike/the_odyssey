@@ -1,49 +1,42 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   AssistantRuntimeProvider,
   ComposerPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
-  useLocalRuntime,
-  type ChatModelAdapter,
-  type ThreadMessageLike,
 } from "@assistant-ui/react";
-import { ArrowDown, ArrowRight, ArrowUp, Checkmark, Locked } from "@carbon/icons-react";
+import { ArrowDown, ArrowRight, ArrowUp, Checkmark, Locked, StopFilled } from "@carbon/icons-react";
 import ProductShell from "../components/ProductShell";
 import ConnectedSources from "../components/ConnectedSources";
 import {
-  askOperationsAssistant,
-  getWorkItems,
   recentRunForCase,
   startWorkItem,
   type OperationsAssistantResponse,
 } from "../lib/liveApi";
-import { getCannedAnswer } from "../lib/cannedAnswers";
-import type { OperationsAssistantMessage } from "../lib/liveTypes";
-
-const WELCOME = "Tell me what changed or ask what needs attention. I’ll match your question to verified operations data, explain the decision, and keep approval with you.";
-const SESSION_KEY = "nourishops:operations-assistant-session";
-const DEMO_THINKING_MS = typeof navigator !== "undefined" && navigator.userAgent.includes("jsdom") ? 0 : 1400;
-const seedRequests = new Map<string, Promise<OperationsAssistantResponse>>();
-
-type PersistedMessage = {
-  role: "user" | "assistant";
-  content: { type: "text"; text: string }[];
-};
-
-interface PersistedSession {
-  messages: PersistedMessage[];
-  response: OperationsAssistantResponse;
-}
+import {
+  loadAssistantSeed,
+  useOperationsAssistantController,
+  type AssistantProgress,
+} from "../hooks/useOperationsAssistantController";
+import {
+  clearAssistantSession,
+  readAssistantSession,
+  textMessage,
+  writeAssistantSession,
+  type PersistedMessage,
+} from "../lib/operationsAssistantSession";
 
 export default function OperationsAssistant() {
   const [params] = useSearchParams();
   const prompt = params.get("prompt")?.trim() ?? "";
-  const fresh = params.get("new") === "1";
-  const stored = useMemo(() => prompt || fresh ? null : readSession(), [fresh, prompt]);
+  const conversationKey = params.get("new") ?? "stored";
+  const fresh = params.has("new");
+  const stored = useMemo(() => prompt || fresh ? null : readAssistantSession(), [fresh, prompt]);
   const [seed, setSeed] = useState<OperationsAssistantResponse | null>(stored?.response ?? null);
   const [loading, setLoading] = useState(Boolean(prompt));
+  const [partialAnswer, setPartialAnswer] = useState("");
+  const [initialProgress, setInitialProgress] = useState<AssistantProgress | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -51,21 +44,33 @@ export default function OperationsAssistant() {
       if (fresh) setSeed(null);
       return;
     }
-    let active = true;
+    const controller = new AbortController();
     setLoading(true);
     setError("");
-    seedRequest(prompt)
+    setPartialAnswer("");
+    setInitialProgress(null);
+    loadAssistantSeed(prompt, controller.signal, (event) => {
+      if (event.type === "progress") setInitialProgress(event);
+      if (event.type === "delta") {
+        setInitialProgress(null);
+        setPartialAnswer((current) => current + event.delta);
+      }
+    })
       .then((response) => {
-        if (!active) return;
+        if (controller.signal.aborted) return;
         setSeed(response);
-        writeSession({
+        writeAssistantSession({
           messages: [textMessage("user", prompt), textMessage("assistant", response.answer)],
           response,
         });
       })
-      .catch((reason: Error) => active && setError(reason.message))
-      .finally(() => active && setLoading(false));
-    return () => { active = false; };
+      .catch((reason: Error) => {
+        if (!controller.signal.aborted) setError(reason.message);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
   }, [fresh, prompt]);
 
   if (loading) {
@@ -80,7 +85,9 @@ export default function OperationsAssistant() {
           <div className="assistant-layout">
             <section className="assistant-thread assistant-loading-thread" aria-label="Conversation loading">
               <div className="assistant-message assistant-message--user"><span>You</span><p>{prompt}</p></div>
-              <ThinkingMessage />
+              {partialAnswer
+                ? <StreamingSeedMessage answer={partialAnswer} />
+                : <ThinkingMessage progress={initialProgress} />}
             </section>
             <aside className="assistant-context"><span>Current decision</span><h2>Matching this to the right situation</h2><p>The related issue, information checked, and next action will appear here.</p></aside>
           </div>
@@ -93,7 +100,7 @@ export default function OperationsAssistant() {
     <ProductShell active="assistant">
       {error && <div className="service-error assistant-route-error" role="alert">{error}</div>}
       <AssistantThread
-        key={prompt || (fresh ? "new" : "stored")}
+        key={prompt || conversationKey}
         prompt={prompt}
         seed={seed}
         storedMessages={stored?.messages ?? []}
@@ -112,63 +119,10 @@ function AssistantThread({
   storedMessages: PersistedMessage[];
 }) {
   const navigate = useNavigate();
-  const [response, setResponse] = useState<OperationsAssistantResponse | null>(seed);
   const [opening, setOpening] = useState(false);
-  const [thinking, setThinking] = useState(false);
-  const [error, setError] = useState("");
-  const contextItemId = useRef(seed?.work_item?.work_item_id);
-
-  useEffect(() => {
-    setResponse(seed);
-    contextItemId.current = seed?.work_item?.work_item_id;
-  }, [seed]);
-
-  const adapter = useMemo<ChatModelAdapter>(() => ({
-    async run({ messages, abortSignal }) {
-      setError("");
-      setThinking(true);
-      const conversation: OperationsAssistantMessage[] = messages
-        .filter((message) => message.role === "user" || message.role === "assistant")
-        .map((message) => ({
-          role: message.role as "user" | "assistant",
-          content: messageText(message),
-        }))
-        .filter((message) => message.content.length > 0);
-      const lastUser = [...conversation].reverse().find((message) => message.role === "user");
-      const startedAt = Date.now();
-      try {
-        const guided = lastUser ? await guidedDemoResponse(lastUser.content) : null;
-        const next = guided ?? await askOperationsAssistant(conversation, contextItemId.current);
-        if (guided) await waitForDemoThinking(startedAt);
-        if (abortSignal.aborted) throw new DOMException("Aborted", "AbortError");
-        contextItemId.current = next.work_item?.work_item_id;
-        setResponse(next);
-        writeSession({
-          messages: [
-            ...conversation.map((message) => textMessage(message.role, message.content)),
-            textMessage("assistant", next.answer),
-          ],
-          response: next,
-        });
-        return { content: [{ type: "text", text: next.answer }] };
-      } catch (cause) {
-        if (!abortSignal.aborted) setError((cause as Error).message);
-        throw cause;
-      } finally {
-        setThinking(false);
-      }
-    },
-  }), []);
-
-  const initialMessages = useMemo<ThreadMessageLike[]>(() => {
-    if (storedMessages.length) return storedMessages;
-    if (prompt && seed) {
-      return [textMessage("user", prompt), textMessage("assistant", seed.answer)];
-    }
-    return [textMessage("assistant", WELCOME)];
-  }, [prompt, seed, storedMessages]);
-  const runtime = useLocalRuntime(adapter, { initialMessages });
-  const currentItem = response?.work_item ?? null;
+  const { runtime, response, currentItem, progress, running, error, setError } = useOperationsAssistantController({
+    prompt, seed, storedMessages,
+  });
   const existingRun = currentItem ? recentRunForCase(currentItem.case_key) : undefined;
 
   async function openDecision() {
@@ -188,13 +142,9 @@ function AssistantThread({
     }
   }
 
-  function askSuggested(question: string) {
-    navigate(`/assistant?prompt=${encodeURIComponent(question)}`);
-  }
-
   function startNewConversation() {
-    sessionStorage.removeItem(SESSION_KEY);
-    navigate("/assistant?new=1");
+    clearAssistantSession();
+    navigate(`/assistant?new=${crypto.randomUUID()}`);
   }
 
   return (
@@ -217,12 +167,22 @@ function AssistantThread({
           <ThreadPrimitive.Root className="assistant-thread">
             <ThreadPrimitive.Viewport className="assistant-thread__viewport">
               <ThreadPrimitive.Messages components={{ UserMessage, AssistantMessage }} />
-              {thinking && <ThinkingMessage />}
+              {running && progress && <ThinkingMessage progress={progress} />}
               <ThreadPrimitive.ViewportFooter className="assistant-thread__footer">
+                {!running && response?.suggested_questions.length ? (
+                  <div className="assistant-followups" aria-label="Useful follow-up questions">
+                    <span>Useful follow-ups</span>
+                    <div>{response.suggested_questions.slice(0, 3).map((question) => (
+                      <ThreadPrimitive.Suggestion key={question} prompt={question} send>{question}</ThreadPrimitive.Suggestion>
+                    ))}</div>
+                  </div>
+                ) : null}
                 <ThreadPrimitive.ScrollToBottom className="assistant-scroll" aria-label="Scroll to latest message"><ArrowDown size={18} /></ThreadPrimitive.ScrollToBottom>
                 <ComposerPrimitive.Root className="assistant-composer">
                   <ComposerPrimitive.Input aria-label="Ask about operations" placeholder="Ask a follow-up about this decision" rows={2} />
-                  <ComposerPrimitive.Send className="assistant-composer__send" aria-label="Send message"><ArrowUp size={20} /></ComposerPrimitive.Send>
+                  {running
+                    ? <ComposerPrimitive.Cancel className="assistant-composer__send assistant-composer__cancel" aria-label="Stop response"><StopFilled size={18} /></ComposerPrimitive.Cancel>
+                    : <ComposerPrimitive.Send className="assistant-composer__send" aria-label="Send message"><ArrowUp size={20} /></ComposerPrimitive.Send>}
                 </ComposerPrimitive.Root>
                 <p><Locked size={12} aria-hidden /> The agent cannot approve or perform an action</p>
               </ThreadPrimitive.ViewportFooter>
@@ -240,6 +200,7 @@ function AssistantThread({
                 <p>{currentItem.presentation.issue.summary}</p>
                 <div className="assistant-context__source"><Checkmark size={17} />{currentItem.source_count} case records checked</div>
                 <div className={`agent-mode-line${response.agent.effective_mode === "offline_fallback" ? " agent-mode-line--fallback" : ""}`}><span className="agent-mode-dot" aria-hidden />{agentModeLabel(response)}</div>
+                {running && <LiveProgress progress={progress} />}
                 <section className="assistant-work" aria-label="What ShareStack did">
                   <strong>What ShareStack did</strong>
                   <ol>
@@ -274,7 +235,7 @@ function AssistantThread({
                     "Are any deliveries at risk?",
                     "Do any records conflict?",
                   ]).slice(0, 3).map((question) => (
-                    <button key={question} type="button" onClick={() => askSuggested(question)}>{question}<ArrowRight size={15} /></button>
+                    <ThreadPrimitive.Suggestion key={question} prompt={question} send>{question}<ArrowRight size={15} /></ThreadPrimitive.Suggestion>
                   ))}
                 </div>
               </>
@@ -305,91 +266,27 @@ function AssistantMessage() {
   );
 }
 
-function ThinkingMessage() {
+function ThinkingMessage({ progress }: { progress: AssistantProgress | null }) {
   return (
     <div className="assistant-message assistant-message--agent assistant-thinking" role="status" aria-live="polite">
       <span>ShareStack decision agent</span>
       <div>
-        <p>Checking inventory, deliveries, and available responses</p>
+        <p>{progress?.message ?? "Checking inventory, deliveries, and available responses"}</p>
         <span className="assistant-thinking__dots" aria-hidden="true"><i /><i /><i /></span>
       </div>
     </div>
   );
 }
 
-function messageText(message: unknown): string {
-  const content = (message as { content?: { type: string; text?: string }[] } | undefined)?.content ?? [];
-  return content.filter((part) => part.type === "text").map((part) => part.text ?? "").join("\n").trim();
+function StreamingSeedMessage({ answer }: { answer: string }) {
+  return <div className="assistant-message assistant-message--agent"><span>ShareStack decision agent</span><div><p>{answer}</p></div></div>;
 }
 
-function textMessage(role: "user" | "assistant", text: string): PersistedMessage {
-  return { role, content: [{ type: "text", text }] };
-}
-
-function readSession(): PersistedSession | null {
-  try {
-    const value = sessionStorage.getItem(SESSION_KEY);
-    return value ? JSON.parse(value) as PersistedSession : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeSession(session: PersistedSession) {
-  try {
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
-  } catch {
-    // The conversation remains usable when browser storage is unavailable.
-  }
-}
-
-function seedRequest(prompt: string): Promise<OperationsAssistantResponse> {
-  const existing = seedRequests.get(prompt);
-  if (existing) return existing;
-  const request = (async () => {
-    const startedAt = Date.now();
-    const guided = await guidedDemoResponse(prompt);
-    if (guided) {
-      await waitForDemoThinking(startedAt);
-      return guided;
-    }
-    return askOperationsAssistant([{ role: "user", content: prompt }]);
-  })();
-  seedRequests.set(prompt, request);
-  void request.then(
-    () => seedRequests.delete(prompt),
-    () => seedRequests.delete(prompt),
-  );
-  return request;
-}
-
-async function guidedDemoResponse(prompt: string): Promise<OperationsAssistantResponse | null> {
-  const canned = getCannedAnswer(prompt);
-  if (!canned || !isProteinDemoPrompt(prompt)) return canned;
-  try {
-    const workItem = (await getWorkItems()).find((item) => item.case_key === "scenario_a") ?? null;
-    if (!workItem) return canned;
-    return {
-      ...canned,
-      response_type: "DECISION",
-      work_item: workItem,
-    };
-  } catch {
-    // The guided explanation remains available if the work-item service is unavailable.
-    return canned;
-  }
-}
-
-function isProteinDemoPrompt(prompt: string) {
-  const normalized = prompt.trim().toLowerCase().replace(/\s+/g, " ").replace(/[?.!]+$/, "");
-  return normalized === "what needs my attention first"
-    || normalized === "why is the protein shortage urgent"
-    || normalized === "tell me more about protein";
-}
-
-async function waitForDemoThinking(startedAt: number) {
-  const remaining = DEMO_THINKING_MS - (Date.now() - startedAt);
-  if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
+function LiveProgress({ progress }: { progress: AssistantProgress | null }) {
+  return <div className="assistant-live-progress" role="status" aria-live="polite">
+    <span className="assistant-thinking__dots" aria-hidden="true"><i /><i /><i /></span>
+    <span>{progress?.message ?? "Reviewing your follow-up"}</span>
+  </div>;
 }
 
 function responseLabel(response: OperationsAssistantResponse): string {
@@ -409,7 +306,7 @@ function agentModeLabel(response: OperationsAssistantResponse): string {
   if (agent.effective_mode === "live" && agent.status === "live_verified") {
     return "Decision agent completed its review";
   }
-  if (agent.effective_mode === "offline_fallback") {
+  if (agent.effective_mode === "offline_fallback" || agent.effective_mode === "offline") {
     return "Verified backup review completed";
   }
   return "Verified decision review completed";

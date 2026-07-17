@@ -1,15 +1,18 @@
 """FastAPI transport for the local synthetic ShareStack simulation."""
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Annotated, Any
 from uuid import uuid4
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
+
+from nourishops.api.assistant_stream import answer_chunks, encode_event
 
 from nourishops.api.models import (
     ActionPreviewRequest,
@@ -164,6 +167,94 @@ def operations_assistant(request: OperationsAssistantRequest):
     return envelope(service.answer_operations_question(
         request.conversation(), request.current_work_item_id,
     ))
+
+
+@app.post("/api/v1/operations-assistant/stream")
+async def stream_operations_assistant(
+    payload: OperationsAssistantRequest,
+    request: Request,
+):
+    """Stream safe progress plus the validated assistant response as NDJSON.
+
+    The routing model returns a closed selection schema. We therefore stream
+    progress while that validation runs, then stream only backend-rendered facts.
+    """
+    conversation = payload.conversation()
+    request_id = f"REQ-{uuid4().hex[:10].upper()}"
+
+    async def events():
+        sequence = 0
+        task = asyncio.create_task(asyncio.to_thread(
+            service.answer_operations_question,
+            conversation,
+            payload.current_work_item_id,
+        ))
+        stages = (
+            ("MATCHING", "Matching your question to today’s situations"),
+            ("READING", "Reading the relevant operational records"),
+            ("CHECKING", "Checking available responses and safety limits"),
+        )
+        result = None
+        try:
+            for stage, message in stages:
+                if await request.is_disconnected():
+                    task.cancel()
+                    return
+                sequence += 1
+                yield encode_event(
+                    "progress", sequence, request_id=request_id,
+                    stage=stage, message=message,
+                )
+                try:
+                    result = await asyncio.wait_for(
+                        asyncio.shield(task), timeout=0.35,
+                    )
+                    break
+                except TimeoutError:
+                    continue
+            if result is None:
+                result = await task
+            for chunk in answer_chunks(result["answer"]):
+                if await request.is_disconnected():
+                    return
+                sequence += 1
+                yield encode_event(
+                    "delta", sequence, request_id=request_id, delta=chunk,
+                )
+                await asyncio.sleep(0.012)
+            sequence += 1
+            yield encode_event(
+                "result", sequence, request_id=request_id,
+                data=result, meta=meta(result.get("agent")),
+            )
+            sequence += 1
+            yield encode_event("done", sequence, request_id=request_id)
+        except asyncio.CancelledError:
+            task.cancel()
+            raise
+        except ApplicationError as exc:
+            sequence += 1
+            yield encode_event(
+                "error", sequence, request_id=request_id,
+                code=exc.code, message=exc.message, retryable=False,
+            )
+        except Exception:
+            sequence += 1
+            yield encode_event(
+                "error", sequence, request_id=request_id,
+                code="ASSISTANT_STREAM_FAILED",
+                message="The decision agent could not complete that review.",
+                retryable=True,
+            )
+
+    return StreamingResponse(
+        events(),
+        media_type="application/x-ndjson",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.post("/api/v1/runs", status_code=201)

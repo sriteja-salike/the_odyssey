@@ -155,6 +155,46 @@ export interface OperationsAssistantMessage {
   content: string;
 }
 
+export type OperationsAssistantStreamEvent =
+  | {
+      protocol: "operations-assistant-stream/1.0.0";
+      type: "progress";
+      sequence: number;
+      request_id: string;
+      stage: "MATCHING" | "READING" | "CHECKING";
+      message: string;
+    }
+  | {
+      protocol: "operations-assistant-stream/1.0.0";
+      type: "delta";
+      sequence: number;
+      request_id: string;
+      delta: string;
+    }
+  | {
+      protocol: "operations-assistant-stream/1.0.0";
+      type: "result";
+      sequence: number;
+      request_id: string;
+      data: OperationsAssistantResponse;
+      meta: Record<string, unknown>;
+    }
+  | {
+      protocol: "operations-assistant-stream/1.0.0";
+      type: "done";
+      sequence: number;
+      request_id: string;
+    }
+  | {
+      protocol: "operations-assistant-stream/1.0.0";
+      type: "error";
+      sequence: number;
+      request_id: string;
+      code: string;
+      message: string;
+      retryable: boolean;
+    };
+
 export interface DecisionBrief {
   schema_version: "decision-brief/1.0.0";
   run_id: string;

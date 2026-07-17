@@ -11,6 +11,7 @@ import OperationsAssistant from "./OperationsAssistant";
 
 const mocks = vi.hoisted(() => ({
   askOperationsAssistant: vi.fn(),
+  streamOperationsAssistant: vi.fn(),
   getWorkItems: vi.fn(),
   startWorkItem: vi.fn(),
 }));
@@ -18,6 +19,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../lib/liveApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../lib/liveApi")>()),
   askOperationsAssistant: mocks.askOperationsAssistant,
+  streamOperationsAssistant: mocks.streamOperationsAssistant,
   getWorkItems: mocks.getWorkItems,
   startWorkItem: mocks.startWorkItem,
 }));
@@ -83,6 +85,7 @@ function response(answer: string): OperationsAssistantResponse {
 beforeEach(() => {
   sessionStorage.clear();
   mocks.askOperationsAssistant.mockReset();
+  mocks.streamOperationsAssistant.mockReset();
   mocks.getWorkItems.mockReset();
   mocks.getWorkItems.mockResolvedValue([proteinItem]);
   mocks.startWorkItem.mockReset();
@@ -99,6 +102,7 @@ describe("operations agent conversation", () => {
     expect(await screen.findByText(/USDA Protein \(PO-4471\)/)).toBeInTheDocument();
     expect(screen.getByText(/Prairie Farms/)).toBeInTheDocument();
     expect(mocks.askOperationsAssistant).not.toHaveBeenCalled();
+    expect(mocks.streamOperationsAssistant).not.toHaveBeenCalled();
   });
 
   it("runs the guided two-turn demo with a thinking state and decision handoff", async () => {
@@ -127,10 +131,11 @@ describe("operations agent conversation", () => {
     expect(screen.getByText("Guided demo review completed")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Open agent recommendation/ })).toBeInTheDocument();
     expect(mocks.askOperationsAssistant).not.toHaveBeenCalled();
+    expect(mocks.streamOperationsAssistant).not.toHaveBeenCalled();
   });
 
   it("hands an unscripted follow-up to the live agent with the guided context", async () => {
-    mocks.askOperationsAssistant.mockResolvedValue({
+    mockStreaming({
       ...response("The live agent compared cost, arrival timing, and coverage risk."),
       response_type: "DECISION",
       work_item: proteinItem,
@@ -151,8 +156,8 @@ describe("operations agent conversation", () => {
     await user.click(screen.getByRole("button", { name: "Send message" }));
     expect(await screen.findByText("The live agent compared cost, arrival timing, and coverage risk.")).toBeInTheDocument();
 
-    expect(mocks.askOperationsAssistant).toHaveBeenCalledTimes(1);
-    const [messages, currentId] = mocks.askOperationsAssistant.mock.calls[0];
+    expect(mocks.streamOperationsAssistant).toHaveBeenCalledTimes(1);
+    const [messages, currentId] = mocks.streamOperationsAssistant.mock.calls[0];
     expect(messages).toEqual(expect.arrayContaining([
       { role: "user", content: "What needs my attention first?" },
       expect.objectContaining({ role: "assistant", content: expect.stringContaining("10,000 lb USDA protein shipment") }),
@@ -162,17 +167,18 @@ describe("operations agent conversation", () => {
   });
 
   it("sends full history on follow-up and exposes agent provenance", async () => {
-    mocks.askOperationsAssistant
-      .mockResolvedValueOnce(response("I found a decision-critical record conflict."))
-      .mockResolvedValueOnce(response("Expected arrival differs across the two records."));
+    mockStreaming(
+      response("I found a decision-critical record conflict."),
+      response("Expected arrival differs across the two records."),
+    );
     const { container } = render(
       <MemoryRouter initialEntries={["/assistant?prompt=Do%20any%20records%20conflict%3F"]}>
         <Routes><Route path="/assistant" element={<OperationsAssistant />} /></Routes>
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText("I found a decision-critical record conflict.")).toBeInTheDocument();
-    expect(screen.getByText("Decision agent completed its review")).toBeInTheDocument();
+    expect(await screen.findByText("Decision agent completed its review")).toBeInTheDocument();
+    expect(screen.getByText("I found a decision-critical record conflict.")).toBeInTheDocument();
     expect(screen.getByText("What ShareStack did")).toBeInTheDocument();
     expect(screen.getByText("7 case records across 1 connected operational system")).toBeInTheDocument();
     expect(screen.getByText("Discussing")).toBeInTheDocument();
@@ -183,8 +189,8 @@ describe("operations agent conversation", () => {
     await userEvent.setup().click(screen.getByRole("button", { name: "Send message" }));
 
     await screen.findByText("Expected arrival differs across the two records.");
-    await waitFor(() => expect(mocks.askOperationsAssistant).toHaveBeenCalledTimes(2));
-    const [messages, currentId] = mocks.askOperationsAssistant.mock.calls[1];
+    await waitFor(() => expect(mocks.streamOperationsAssistant).toHaveBeenCalledTimes(2));
+    const [messages, currentId] = mocks.streamOperationsAssistant.mock.calls[1];
     expect(messages).toEqual(expect.arrayContaining([
       { role: "user", content: "Do any records conflict?" },
       { role: "assistant", content: "I found a decision-critical record conflict." },
@@ -213,6 +219,57 @@ describe("operations agent conversation", () => {
     expect(mocks.askOperationsAssistant).not.toHaveBeenCalled();
   });
 
+  it("shows live progress before incrementally rendering a verified answer", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    mocks.streamOperationsAssistant.mockImplementation(async function* () {
+      yield progressEvent("READING", "Reading the relevant operational records");
+      await gate;
+      yield deltaEvent("Verified records show ");
+      yield deltaEvent("one delivery at risk.");
+      yield resultEvent(response("Verified records show one delivery at risk."));
+    });
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={["/assistant?new=1"]}>
+        <Routes><Route path="/assistant" element={<OperationsAssistant />} /></Routes>
+      </MemoryRouter>,
+    );
+
+    const input = screen.getByRole("textbox", { name: "Ask about operations" });
+    await user.type(input, "Which delivery is at risk?");
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+    expect(await screen.findByText("Reading the relevant operational records")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Stop response" })).toBeInTheDocument();
+
+    release();
+    expect(await screen.findByText("Verified records show one delivery at risk.")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Send message" })).toBeInTheDocument();
+  });
+
+  it("lets the employee stop an in-flight response", async () => {
+    mocks.streamOperationsAssistant.mockImplementation(async function* (_messages, _currentId, signal: AbortSignal) {
+      yield progressEvent("CHECKING", "Checking available responses and safety limits");
+      await new Promise<void>((_resolve, reject) => {
+        signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+      });
+    });
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={["/assistant?new=1"]}>
+        <Routes><Route path="/assistant" element={<OperationsAssistant />} /></Routes>
+      </MemoryRouter>,
+    );
+
+    const input = screen.getByRole("textbox", { name: "Ask about operations" });
+    await user.type(input, "Compare the safe responses.");
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+    await user.click(await screen.findByRole("button", { name: "Stop response" }));
+
+    expect(await screen.findByRole("button", { name: "Send message" })).toBeInTheDocument();
+    expect(screen.queryByText(/Try sending the question again/)).not.toBeInTheDocument();
+  });
+
   it("clears the matched scenario when starting a new conversation", async () => {
     const saved = response("The records still need correction.");
     sessionStorage.setItem("nourishops:operations-assistant-session", JSON.stringify({
@@ -228,3 +285,46 @@ describe("operations agent conversation", () => {
 });
 
 const WELCOME_TEXT = "Tell me what changed or ask what needs attention. I’ll match your question to verified operations data, explain the decision, and keep approval with you.";
+
+function mockStreaming(...responses: OperationsAssistantResponse[]) {
+  const queue = [...responses];
+  mocks.streamOperationsAssistant.mockImplementation(async function* () {
+    const next = queue.shift();
+    if (!next) throw new Error("Missing mocked assistant response");
+    yield progressEvent("MATCHING", "Matching your question to today’s situations");
+    yield deltaEvent(next.answer);
+    yield resultEvent(next);
+  });
+}
+
+function progressEvent(stage: "MATCHING" | "READING" | "CHECKING", message: string) {
+  return {
+    protocol: "operations-assistant-stream/1.0.0" as const,
+    type: "progress" as const,
+    sequence: 1,
+    request_id: "REQ-TEST",
+    stage,
+    message,
+  };
+}
+
+function deltaEvent(delta: string) {
+  return {
+    protocol: "operations-assistant-stream/1.0.0" as const,
+    type: "delta" as const,
+    sequence: 2,
+    request_id: "REQ-TEST",
+    delta,
+  };
+}
+
+function resultEvent(data: OperationsAssistantResponse) {
+  return {
+    protocol: "operations-assistant-stream/1.0.0" as const,
+    type: "result" as const,
+    sequence: 3,
+    request_id: "REQ-TEST",
+    data,
+    meta: {},
+  };
+}

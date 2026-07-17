@@ -116,7 +116,10 @@ class OfflineOperationsAgent:
             "DONATION_DISPOSITION": ("donation", "snack", "redirect", "mismatch", "partner food bank"),
             "RESOURCE_TRADEOFF": ("budget", "cost", "fund", "money", "dairy"),
             "DATA_RECONCILIATION": ("conflict", "record", "disagree", "missing", "source status"),
-            "INBOUND_DISRUPTION": ("delivery", "shipment", "protein", "inbound", "late", "delay"),
+            "INBOUND_DISRUPTION": (
+                "delivery", "deliveries", "shipment", "shipments",
+                "protein", "inbound", "late", "delay",
+            ),
         }
         matched = next(
             (
@@ -321,7 +324,20 @@ class ResilientOperationsAgent:
         if self.primary is None:
             return self.fallback.route(messages, work_items, current_work_item_id)
         try:
-            return self.primary.route(messages, work_items, current_work_item_id)
+            outcome = self.primary.route(messages, work_items, current_work_item_id)
+            if outcome.selection.response_type != "CLARIFY":
+                return outcome
+            recovery = self.fallback.route(
+                messages, work_items, current_work_item_id,
+            )
+            if recovery.selection.response_type == "CLARIFY":
+                return outcome
+            return OperationsAgentOutcome(
+                selection=recovery.selection,
+                metadata=outcome.metadata.model_copy(update={
+                    "fallback_code": "DETERMINISTIC_INTENT_RECOVERY",
+                }),
+            )
         except Exception:
             primary = self.primary.describe()
             metadata = AgentMetadata(

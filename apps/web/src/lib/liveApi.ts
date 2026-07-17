@@ -6,7 +6,8 @@ import { letterFromRunId } from "./run";
 import { buildDecisionPresentation } from "./decisionPresentation";
 import type { Decision } from "./runState";
 import type { DecisionKind } from "./runState";
-import type { LiveEvent, LiveRun, OperationsAssistantMessage, OperationsAssistantResponse, WorkItem } from "./liveTypes";
+import type { LiveEvent, LiveRun, OperationsAssistantMessage, OperationsAssistantResponse, OperationsAssistantStreamEvent, WorkItem } from "./liveTypes";
+import { parseOperationsAssistantEvent } from "./operationsAssistantStream";
 import {
   oCreateRun,
   oDecideRun,
@@ -245,6 +246,79 @@ export async function askOperationsAssistant(
     markOffline();
     return offlineAssistantAnswer(messages, currentWorkItemId);
   }
+}
+
+export async function* streamOperationsAssistant(
+  messages: OperationsAssistantMessage[],
+  currentWorkItemId: string | undefined,
+  signal: AbortSignal,
+): AsyncGenerator<OperationsAssistantStreamEvent> {
+  if (OFFLINE) {
+    yield offlineStreamResult(offlineAssistantAnswer(messages, currentWorkItemId));
+    return;
+  }
+  let response: Response;
+  try {
+    response = await fetch("/api/v1/operations-assistant/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/x-ndjson" },
+      body: JSON.stringify({
+        messages: messages.slice(-12),
+        current_work_item_id: currentWorkItemId ?? null,
+      }),
+      signal,
+    });
+  } catch (error) {
+    if (signal.aborted) throw error;
+    markOffline();
+    yield offlineStreamResult(offlineAssistantAnswer(messages, currentWorkItemId));
+    return;
+  }
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+    throw new ApiError(
+      body?.error?.message ?? `The decision API returned ${response.status} ${response.statusText}.`,
+      response.status,
+    );
+  }
+  if (!response.body) throw new Error("The decision agent did not provide a response stream.");
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let receivedResult = false;
+  while (true) {
+    const { done, value } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const event = parseOperationsAssistantEvent(line);
+      if (event.type === "error") throw new Error(event.message);
+      if (event.type === "result") receivedResult = true;
+      yield event;
+    }
+    if (done) break;
+  }
+  if (buffer.trim()) {
+    const event = parseOperationsAssistantEvent(buffer);
+    if (event.type === "error") throw new Error(event.message);
+    if (event.type === "result") receivedResult = true;
+    yield event;
+  }
+  if (!receivedResult) throw new Error("The decision agent response ended before it was verified.");
+}
+
+function offlineStreamResult(data: OperationsAssistantResponse): OperationsAssistantStreamEvent {
+  return {
+    protocol: "operations-assistant-stream/1.0.0",
+    type: "result",
+    sequence: 1,
+    request_id: `OFFLINE-${crypto.randomUUID()}`,
+    data,
+    meta: { agent_mode: "offline_fallback" },
+  };
 }
 
 async function loadActiveRun(letter: ScenarioLetter): Promise<LiveRun> {

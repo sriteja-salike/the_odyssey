@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from uuid import uuid4
 
@@ -74,6 +75,22 @@ def test_home_work_items_and_assistant_route_verified_cases() -> None:
         assert answer.status_code == 200
         assert answer.json()["data"]["work_item"]["state"] == "INFORMATION_NEEDED"
         assert "only a manager" in answer.json()["data"]["authority_note"]
+
+        with client.stream(
+            "POST",
+            "/api/v1/operations-assistant/stream",
+            json={"message": "Do any records conflict?"},
+        ) as stream:
+            events = [json.loads(line) for line in stream.iter_lines() if line]
+        assert stream.status_code == 200
+        assert events[0]["type"] == "progress"
+        assert "".join(
+            event["delta"] for event in events if event["type"] == "delta"
+        ) == answer.json()["data"]["answer"]
+        assert next(
+            event for event in events if event["type"] == "result"
+        )["data"]["work_item"]["state"] == "INFORMATION_NEEDED"
+        assert events[-1]["type"] == "done"
 
 
 @requires_postgres

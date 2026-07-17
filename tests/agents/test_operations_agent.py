@@ -5,8 +5,12 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from nourishops.agents.operations import (
     OfflineOperationsAgent,
+    OperationsAgentOutcome,
+    OperationsAgentSelection,
     PydanticAIOperationsAgent,
+    ResilientOperationsAgent,
 )
+from nourishops.agents.contracts import AgentMetadata
 
 
 def work_items() -> list[dict]:
@@ -113,3 +117,40 @@ def test_live_operations_agent_uses_the_read_only_work_item_tool() -> None:
     assert outcome.selection.work_item_id == "SCN-E"
     assert outcome.metadata.status == "live_verified"
     assert outcome.metadata.tool_calls == ["get_open_work_items"]
+
+
+def test_resilient_agent_recovers_an_obvious_intent_from_unneeded_clarification() -> None:
+    metadata = AgentMetadata(
+        requested_mode="live",
+        effective_mode="live",
+        status="live_verified",
+        role="OPERATIONS_ASSISTANT",
+        provider="anthropic",
+        model="test-model",
+    )
+
+    class UncertainPrimary:
+        def describe(self) -> AgentMetadata:
+            return metadata
+
+        def route(self, messages, items, current_work_item_id=None):
+            return OperationsAgentOutcome(
+                selection=OperationsAgentSelection(
+                    response_type="CLARIFY",
+                    answer_style="CLARIFY",
+                ),
+                metadata=metadata,
+            )
+
+    outcome = ResilientOperationsAgent(
+        primary=UncertainPrimary(),
+        fallback=OfflineOperationsAgent(),
+    ).route(
+        [{"role": "user", "content": "Which deliveries are at risk this week?"}],
+        work_items(),
+    )
+
+    assert outcome.selection.work_item_id == "SCN-A"
+    assert outcome.selection.response_type == "ANSWER"
+    assert outcome.metadata.effective_mode == "live"
+    assert outcome.metadata.fallback_code == "DETERMINISTIC_INTENT_RECOVERY"
