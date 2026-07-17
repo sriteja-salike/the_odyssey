@@ -1252,3 +1252,54 @@ if decision.approved:
 13. Every number and evidence claim in the UI/export is traceable to deterministic output.
 14. Scenario reset leaves prior audit events intact and reproduces the same golden semantic IDs.
 15. Scenario A reproduces every frozen anchor in Section 19.1.
+
+---
+
+## 22. Proposed enhancements (not yet implemented)
+
+The following are design proposals for future work. They are **not normative** — the engine, golden fixtures, and Sections 1–21 above describe current, binding behavior. Nothing here changes an existing formula, constraint, or golden value until it is separately specced and re-approved.
+
+### 22.1 Ratio-based portfolio allocation for `BUDGET_TRADEOFF`
+
+Today, per §5.5, the affordability test for `BUDGET_TRADEOFF` "never allocates a portfolio" — the engine funds exactly one competing category in full and leaves the others open. Proposal: add a portfolio candidate action that funds every competing category at least partially.
+
+Algorithm:
+
+1. For every competing category `c`, compute `floor_qty(c) = minimum_quantity_lb(c)` and `floor_cost(c) = floor_qty(c) × unit_price(c)`.
+2. If `Σ floor_cost(c) > remaining_budget`, the portfolio is infeasible; fall back to current single-winner behavior.
+3. Otherwise, fund every category's floor first, so no competing category is left at zero.
+4. Compute `leftover = remaining_budget − Σ floor_cost(c)`.
+5. Rank categories by cost-effectiveness: `value_ratio(c) = (priority_weight(c) / 5) ÷ unit_price(c)`.
+6. Spend `leftover` one `quantity_increment_lb` step at a time, always to the category with the highest current `value_ratio(c)` among categories that have not yet reached their full need or `maximum_quantity_lb`.
+7. Stop when no remaining category can afford another legal increment.
+8. Score the resulting bundle through the existing §9 formula unchanged — `burden(v)` already sums over the full competing category set `C`, so a multi-category purchase's burden reduction is directly computable with no formula changes — and rank it against the single-category candidates using the existing §9.10 tie-break chain.
+
+Generalizes to more than two competing categories without change, since the allocation loop already iterates over the full competing set.
+
+### 22.2 Usage-derived `priority_weight` (remove hardcoded config)
+
+Today, `priority_weight(c)` is a static value set once per category in `category_policies.json` (e.g. `PROTEIN=5`, `DAIRY=4`) and never recalculated from actual distribution activity. Proposal: derive it from that food bank's own recent usage instead.
+
+```
+derived_priority_weight(c, t) = normalize_to_1_5(
+    distribution_volume(c, t-4..t-1) / total_distribution_volume(all categories, t-4..t-1)
+)
+```
+
+- Reuses the same 4-week moving-average window already computed for the demand forecast (§4.1) — no new data pipeline.
+- Recomputed on the same weekly cadence as the forecast refresh.
+- Normalized into the existing 1–5 range so every formula referencing `priority_weight(c)/5` throughout Section 9 needs no structural change — only the source of the input changes.
+- A floor (e.g. never below 1) prevents a quiet category from being weighted to zero and dropping out of consideration entirely.
+
+### 22.3 Cross-week persistent state (memory)
+
+Today, per §12, "all policies begin from the same immutable scenario snapshot" — each evaluation run is independent, and nothing carries the outcome of a prior week's approved actions or unresolved risks into the next run. Proposal: introduce a persistent `warehouse_state` record, keyed by `warehouse_id + week_start`, that each new weekly run reads as its starting point.
+
+State carried forward:
+
+1. **Budget:** `remaining_budget_usd(t) = remaining_budget_usd(t-1) − approved_direct_cost(t-1) + replenishment(t)`.
+2. **Inventory:** the existing single-scenario carryover math (`carryover_usable_storage_lb`, §1) extends across week boundaries instead of resetting.
+3. **Open risks:** a risk left unresolved (e.g. the losing category in a `BUDGET_TRADEOFF`) carries forward with a `weeks_open` counter, allowing `priority_score` to include an aging/urgency term instead of the risk silently reappearing as if new.
+4. **Approval events:** once an action is confirmed rather than merely simulated, its cost and inventory effect become the new baseline for the following week's run.
+
+Storage: a new fixture/store type analogous to existing ones (`category_policies.json`, `candidate_actions.json`) — versioned, exact-decimal, and auditable, consistent with the determinism requirements in §1.1 and §14. This is the most architecturally significant of the three proposals, since it turns the system from "evaluate one static snapshot" into "maintain continuous state across runs," touching the run harness rather than only the scoring formulas.
