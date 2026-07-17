@@ -1,4 +1,4 @@
-/* Carbon owns focus management, dismissal, and modal semantics. NourishOps only
+/* Carbon owns focus management, dismissal, and modal semantics. ShareStack only
    supplies the domain-specific consequence copy and decision labels. */
 import { ComposedModal, ModalBody, ModalFooter, ModalHeader } from "@carbon/react";
 

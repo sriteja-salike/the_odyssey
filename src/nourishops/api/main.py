@@ -1,4 +1,4 @@
-"""FastAPI transport for the local synthetic NourishOps simulation."""
+"""FastAPI transport for the local synthetic ShareStack simulation."""
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -92,7 +92,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="NourishOps API", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="ShareStack API", version="0.2.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.allowed_origin, "http://localhost:5173"],

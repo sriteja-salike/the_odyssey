@@ -1,4 +1,4 @@
-/* NourishOps "Operational Dossier" — Carbon carries controls, accessibility,
+/* ShareStack "Operational Dossier" — Carbon carries controls, accessibility,
    and interaction conventions; these rules define the decision hierarchy. */
 
 .app-shell { min-height: 100vh; padding-top: 48px; }
@@ -959,6 +959,34 @@ h2.sec, h3.sec { margin-bottom: var(--s4); }
 .briefing-next strong { color: var(--ink); font-size: 12px; }
 .briefing-next small { max-width: 460px; overflow: hidden; color: var(--quiet); text-overflow: ellipsis; white-space: nowrap; }
 
+.records-main { width: min(920px, calc(100% - 48px)); margin: 0 auto; padding: 52px 0 88px; }
+.records-lead { max-width: 680px; }
+.records-lead .eyebrow { margin-bottom: 10px; color: #9a762b; }
+.records-lead h1 { margin: 0; color: var(--ink); font-family: var(--font-display); font-size: clamp(46px, 5vw, 66px); font-weight: 500; letter-spacing: -.04em; line-height: 1; }
+.records-lead > p:last-child { margin: 12px 0 0; color: var(--sub); font-size: 16px; line-height: 1.55; }
+.records-state,
+.records-latest { margin-top: 34px; background: rgba(255, 254, 250, .82); border: 1px solid #d7d0c4; border-radius: 10px; }
+.records-state { min-height: 320px; display: flex; align-items: center; justify-content: center; flex-direction: column; padding: 40px; text-align: center; }
+.records-state > svg { color: #9a762b; }
+.records-state .eyebrow { margin: 18px 0 7px; color: #9a762b; }
+.records-state h2 { margin: 0; color: var(--ink); font-family: var(--font-display); font-size: 32px; }
+.records-state p:not(.eyebrow) { max-width: 540px; margin: 10px 0 22px; color: var(--sub); line-height: 1.6; }
+.records-state--error > svg { color: var(--breach); }
+.records-latest { overflow: hidden; }
+.records-latest__topline { min-height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 22px; background: rgba(255, 254, 250, .74); border-bottom: 1px solid var(--line); }
+.records-latest__topline > span:first-child { display: inline-flex; align-items: center; gap: 8px; color: var(--sub); font-size: 12px; font-weight: 600; }
+.records-latest__body { padding: 28px; }
+.records-latest__kicker { margin: 0 0 7px !important; color: #a46916 !important; font-size: 10px !important; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.records-latest__body h2 { max-width: 720px; margin: 0; color: var(--ink); font-family: var(--font-display); font-size: clamp(30px, 4vw, 42px); font-weight: 600; letter-spacing: -.025em; line-height: 1.08; }
+.records-latest__body > p { max-width: 68ch; margin: 11px 0 0; color: var(--sub); line-height: 1.6; }
+.records-proof { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 26px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.records-proof > span { min-height: 84px; display: grid; grid-template-columns: 22px minmax(0, 1fr); align-content: center; padding: 14px 16px; }
+.records-proof > span + span { border-left: 1px solid var(--line); }
+.records-proof svg { grid-row: 1 / span 2; color: var(--ok); }
+.records-proof strong { color: var(--ink); font-size: 12px; }
+.records-proof small { margin-top: 3px; color: var(--quiet); font-size: 11px; line-height: 1.35; }
+.records-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 26px; }
+
 .assistant-loading { min-height: 70vh; display: grid; place-items: center; color: var(--sub); }
 .assistant-route-error { margin-top: 24px; }
 .assistant-page { width: min(1240px, calc(100% - 48px)); margin: 0 auto; padding: 42px 0 64px; }
@@ -1020,6 +1048,9 @@ h2.sec, h3.sec { margin-bottom: var(--s4); }
   .agent-briefing { margin-top: 52px; }
   .briefing-card__body { grid-template-columns: 1fr; }
   .briefing-primary { width: 100%; }
+  .records-main { width: min(100% - 32px, 700px); padding: 44px 0 92px; }
+  .records-proof { grid-template-columns: 1fr; }
+  .records-proof > span + span { border-top: 1px solid var(--line); border-left: 0; }
   .assistant-page { width: min(100% - 32px, 700px); padding-bottom: 92px; }
   .assistant-layout { grid-template-columns: 1fr; }
   .assistant-context { margin-top: 18px; }
@@ -1042,6 +1073,12 @@ h2.sec, h3.sec { margin-bottom: var(--s4); }
   .briefing-questions { grid-template-columns: 1fr; }
   .briefing-questions button + button { border-top: 1px solid var(--line); border-left: 0; }
   .briefing-next small { max-width: 250px; }
+  .records-main { padding-top: 32px; }
+  .records-lead h1 { font-size: 48px; }
+  .records-state { min-height: 280px; padding: 30px 20px; }
+  .records-latest__body { padding: 22px 18px; }
+  .records-actions { display: grid; }
+  .records-actions > .cds--btn { width: 100%; max-width: none; }
   .assistant-page__intro h1 { font-size: 40px; }
   .assistant-page__intro { margin-bottom: 20px; }
   .assistant-thread { height: 440px; min-height: 440px; }

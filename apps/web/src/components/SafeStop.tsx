@@ -34,7 +34,7 @@ export default function SafeStop({
         <p>{healthy
           ? "The verified four-week check found no actionable supply risk."
           : abstained
-            ? "Nourish Ops did not guess. The records below must be resolved before a recommendation is safe."
+            ? "ShareStack did not guess. The records below must be resolved before a recommendation is safe."
             : "No recommendation or simulated action was recorded."}</p>
       </header>
 

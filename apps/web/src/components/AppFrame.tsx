@@ -71,8 +71,8 @@ export default function AppFrame({ runId, letter, active, onStartClean, children
 
   return (
     <div className="app-shell">
-      <Header aria-label="Nourish Ops" className="app-header">
-        <HeaderName as={NavLink} to="/" prefix="">Nourish Ops</HeaderName>
+      <Header aria-label="ShareStack" className="app-header">
+        <HeaderName as={NavLink} to="/" prefix="">ShareStack</HeaderName>
         <HeaderNavigation aria-label="Primary navigation">
           <HeaderMenuItem as={NavLink} to="/">Home</HeaderMenuItem>
           <HeaderMenuItem as={NavLink} to={`/runs/${runId}`} end isActive={active === "decision"}>Current decision</HeaderMenuItem>

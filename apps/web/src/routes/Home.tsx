@@ -79,7 +79,7 @@ export default function Home() {
               placeholder="Describe an issue or ask about operations"
               rows={2}
             />
-            <button type="submit" aria-label="Ask Nourish Ops" disabled={!prompt.trim()}><ArrowUp size={21} /></button>
+            <button type="submit" aria-label="Ask ShareStack" disabled={!prompt.trim()}><ArrowUp size={21} /></button>
           </form>
           <div className="home-prompts" aria-label="Example questions">
             <span>Examples:</span>

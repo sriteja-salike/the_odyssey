@@ -1,7 +1,7 @@
 [project]
 name = "nourishops"
 version = "0.1.0"
-description = "NourishOps — nutrition-aware supply-resilience decision engine (backend). Synthetic data only."
+description = "ShareStack — nutrition-aware supply-resilience decision engine (backend). Synthetic data only."
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "fastapi>=0.115,<0.116",

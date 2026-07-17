@@ -47,7 +47,7 @@ Home uses operational titles such as `Protein coverage may fall below the safe m
 The UI distinguishes three things Jordan should never have to infer:
 
 1. **Verified issue queue:** Home shows detected issues and blocking records only. It does not show a recommendation before an agent review has run.
-2. **Agent recommendation:** after evaluation, the Nourish Decision Agent turns the verified candidate package into the recommendation Jordan reviews. The surface names the effective agent mode, verified record count, safety check, and human-approval boundary.
+2. **Agent recommendation:** after evaluation, the ShareStack Decision Agent turns the verified candidate package into the recommendation Jordan reviews. The surface names the effective agent mode, verified record count, safety check, and human-approval boundary.
 3. **Human decision:** approval, edit, reject, and defer remain explicit manager actions. The agent cannot submit them or perform an external action.
 
 The Ask route uses the open-source assistant-ui thread/composer pattern. Every request sends up to the last twelve user/assistant messages plus the current matched work item. The typed operations-agent result is one of `ANSWER`, `CLARIFY`, `DECISION`, or `SAFE_STOP`; it may select only a verified work-item ID. The backend, not the model, renders operational facts from the matched presentation contract. An unrelated or ambiguous request returns `CLARIFY` with no silently selected scenario. The conversation and matched work item survive a browser refresh within the tab.
@@ -81,7 +81,7 @@ The active recommendation shows only the action, quantity, simulated cost, timin
 
 ### 0.4 Shell and navigation
 
-The Phase 1 shell contains `Nourish Ops`, `Home`, `Ask`, `Records`, and an overflow menu. Home owns the adaptive briefing; Ask opens the focused assistant; Records points to the current run's Audit/Compare surfaces. Demo fixtures are developer controls under overflow and are never the primary navigation model. Run ID, connection mode, source IDs, versions, and technical context live under `Decision details` or Records. Existing run route URLs remain unchanged.
+The Phase 1 shell contains `ShareStack`, `Home`, `Ask`, `Records`, and an overflow menu. Home owns the adaptive briefing; Ask opens the focused assistant; Records is always available and shows the latest browser-session decision with links to its Audit/Compare surfaces. Demo fixtures are developer controls under overflow and are never the primary navigation model. Run ID, connection mode, source IDs, versions, and technical context live under `Decision details` or Records. Existing run route URLs remain unchanged.
 
 ### 0.5 Scenario explanation contract
 
@@ -170,9 +170,10 @@ The operator must be able to answer these questions without reading generated pr
 The application has an adaptive entry, a supporting assistant, and the existing decision/record destinations.
 
 ```text
-NourishOps
+ShareStack
 ├── Home                /
 ├── Ask                 /assistant
+├── Records             /records
 ├── Decision workspace  /runs/:runId
 ├── Compare             /runs/:runId/compare
 └── Audit               /runs/:runId/audit
@@ -456,7 +457,7 @@ The exact visual layout comes from `02_VISUAL_SYSTEM_AND_SCREEN_REFERENCE.md`. T
 
 Must contain:
 
-- `NourishOps` wordmark;
+- `ShareStack` wordmark;
 - descriptor `Nutrition-Aware Supply Resilience` where space permits;
 - navigation for `Decision`, `Compare`, and `Audit`;
 - active scenario and run ID;

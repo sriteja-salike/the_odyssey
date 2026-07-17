@@ -9,6 +9,7 @@ import "@fontsource/newsreader/500.css";
 import "@fontsource/newsreader/600.css";
 const Home = lazy(() => import("./routes/Home"));
 const OperationsAssistant = lazy(() => import("./routes/OperationsAssistant"));
+const Records = lazy(() => import("./routes/Records"));
 const DecisionWorkspace = lazy(() => import("./routes/DecisionWorkspace"));
 const Compare = lazy(() => import("./routes/Compare"));
 const Audit = lazy(() => import("./routes/Audit"));
@@ -18,6 +19,7 @@ const router = createBrowserRouter(
   [
     { path: "/", element: <Home /> },
     { path: "/assistant", element: <OperationsAssistant /> },
+    { path: "/records", element: <Records /> },
     { path: "/runs/:runId", element: <DecisionWorkspace /> },
     { path: "/runs/:runId/compare", element: <Compare /> },
     { path: "/runs/:runId/audit", element: <Audit /> },

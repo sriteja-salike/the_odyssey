@@ -1,4 +1,4 @@
-# NourishOps — Web frontend
+# ShareStack — Web frontend
 
 React + TypeScript + Vite + Recharts. Visual direction: **B · Control Desk**
 (dark operator console; tokens in `BUILD_CONTEXT/02 §11`).

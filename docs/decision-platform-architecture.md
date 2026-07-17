@@ -1,6 +1,6 @@
 # Decision platform architecture
 
-NourishOps is an Anthropic-first, provider-neutral decision platform. The current
+ShareStack is an Anthropic-first, provider-neutral decision platform. The current
 Scenarios A–E remain the frozen deterministic proof set; new problem families enter
 through versioned scenario packages and registered deterministic solvers.
 

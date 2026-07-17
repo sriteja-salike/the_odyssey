@@ -1,7 +1,7 @@
-# NourishOps — Food Banks + AI Hackathon (AISCO 2026)
+# ShareStack — Food Banks + AI Hackathon (AISCO 2026)
 
-**Product:** NourishOps — a nutrition-aware supply-resilience decision agent for food banks.
-**One line:** When a food bank's supply breaks, NourishOps spots the coming category shortage and recommends the one best fix — a human approves it.
+**Product:** ShareStack — a nutrition-aware supply-resilience decision agent for food banks.
+**One line:** When a food bank's supply breaks, ShareStack spots the coming category shortage and recommends the one best fix — a human approves it.
 **Grounding bank:** Food Finders Food Bank (Lafayette, IN). **Data:** fully synthetic and labeled.
 
 ---

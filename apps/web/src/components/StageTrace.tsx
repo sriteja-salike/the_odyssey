@@ -14,7 +14,7 @@ export default function StageTrace() {
       <header className="journey-intro">
         <Tag type="blue" size="sm">Impact check in progress</Tag>
         <h1>Checking what this means for your operation</h1>
-        <p>Nourish Ops is checking inventory, deliveries, and available responses before it shows a recommendation.</p>
+        <p>ShareStack is checking inventory, deliveries, and available responses before it shows a recommendation.</p>
       </header>
       <ol className="task-list">
         <li className="task-step task-step--active">

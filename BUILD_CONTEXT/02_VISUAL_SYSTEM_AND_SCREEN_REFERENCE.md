@@ -30,7 +30,7 @@ The target user is Jordan, a frequently interrupted food-bank operations coordin
 
 ### 0.2 Screen hierarchy
 
-1. Nourish Ops shell and persistent simulation notice.
+1. ShareStack shell and persistent simulation notice.
 2. On Home: greeting, composer, lightweight prompt examples, then one item from `Today’s decision queue`; no recommendation appears before agent review.
 3. In a decision: plain-language issue label, headline, one-sentence explanation, and three-step journey.
 4. At most one compact visual (approximately 120–160px high) in the current/completed issue step.
@@ -39,7 +39,7 @@ The target user is Jordan, a frequently interrupted food-bank operations coordin
 
 The assistant has a conventional open-source thread/composer structure but remains a separate focused route. Its context surface shows the typed agent outcome, live/fallback mode, verified-source count, safety recheck, and manager-approval boundary. Its handoff is `Open agent recommendation` or `Review blocking records`; there is no chat approval control.
 
-The review card begins with `Agent recommendation`, `Prepared by the Nourish Decision Agent`, and an honest mode tag. A compact verification strip states the verified record count, constraint result, and manager-approval requirement. Scenario E uses the same provenance language as `Agent-safe stop`, while its red blocked step and unavailable confirmation remain visually dominant. AI is communicated through provenance and bounded capabilities, never sparkles, avatars, glowing borders, or theatrical thinking animation.
+The review card begins with `Agent recommendation`, `Prepared by the ShareStack Decision Agent`, and an honest mode tag. A compact verification strip states the verified record count, constraint result, and manager-approval requirement. Scenario E uses the same provenance language as `Agent-safe stop`, while its red blocked step and unavailable confirmation remain visually dominant. AI is communicated through provenance and bounded capabilities, never sparkles, avatars, glowing borders, or theatrical thinking animation.
 
 ### 0.3 Scenario visual mapping
 
@@ -68,7 +68,7 @@ The original ideation moved from Control Desk to Clinical Calm. The user then ex
 
 ## 11. Selected design tokens — Operational Dossier (Carbon)
 
-Light-native, editorial operations workspace built on Carbon White. Carbon components own interaction states and accessibility. NourishOps owns the information hierarchy: disruption first, verified recommendation second, human action third, evidence and agent trace on demand.
+Light-native, editorial operations workspace built on Carbon White. Carbon components own interaction states and accessibility. ShareStack owns the information hierarchy: disruption first, verified recommendation second, human action third, evidence and agent trace on demand.
 
 ### 11.1 Color tokens
 
@@ -128,7 +128,7 @@ Light tints use Carbon token equivalents: breach `#FFF1F1`, ok `#DEFBE6`, warn `
 
 ## 2. Shared visual brief
 
-Design NourishOps as a calm, credible operational decision workspace for a food-bank supply-planning manager.
+Design ShareStack as a calm, credible operational decision workspace for a food-bank supply-planning manager.
 
 The primary review screen must make one decision immediately legible:
 
@@ -175,7 +175,7 @@ Rejected, Deferred, No Action Required, Stale, and Failed do not each require a 
 
 Regardless of selected direction, the 1440 × 1024 review reference must show without scrolling:
 
-- NourishOps identity and primary navigation;
+- ShareStack identity and primary navigation;
 - persistent simulation notice;
 - scenario, as-of date, run ID, and offline/live mode;
 - category and breach timing;

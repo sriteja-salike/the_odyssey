@@ -166,7 +166,7 @@ def get_open_work_items(context: RunContext[OperationsDependencies]) -> list[dic
     return context.deps.work_items
 
 
-OPERATIONS_SYSTEM_PROMPT = """You are the NourishOps operations routing agent for a
+OPERATIONS_SYSTEM_PROMPT = """You are the ShareStack operations routing agent for a
 synthetic food-bank demonstration. Use the latest user message as the main request and
 earlier messages only as conversation context. First call get_open_work_items exactly
 once. Select only an ID returned by that tool. Use DECISION when the user asks what to

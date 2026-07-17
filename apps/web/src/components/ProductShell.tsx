@@ -8,21 +8,21 @@ export default function ProductShell({
   active,
   children,
 }: {
-  active: "home" | "assistant";
+  active: "home" | "assistant" | "records";
   children: React.ReactNode;
 }) {
   const lastRun = sessionStorage.getItem("nourishops:last-run");
   return (
     <div className="product-shell">
       <header className="product-header">
-        <NavLink to="/" className="product-brand" aria-label="Nourish Ops home">
+        <NavLink to="/" className="product-brand" aria-label="ShareStack home">
           <Wheat size={26} aria-hidden />
-          <span>Nourish Ops</span>
+          <span>ShareStack</span>
         </NavLink>
         <nav aria-label="Primary navigation" className="product-nav">
           <NavLink to="/" end aria-current={active === "home" ? "page" : undefined}>Home</NavLink>
           <NavLink to="/assistant" aria-current={active === "assistant" ? "page" : undefined}>Ask</NavLink>
-          {lastRun ? <NavLink to={`/runs/${lastRun}/audit`}>Records</NavLink> : <span aria-disabled="true">Records</span>}
+          <NavLink to="/records" aria-current={active === "records" ? "page" : undefined}>Records</NavLink>
         </nav>
         <div className="simulation-note simulation-note--home" role="note">
           <WarningAlt size={17} aria-hidden />

@@ -121,7 +121,7 @@ export default function DecisionReview({ runId, state, setState, brief, knowledg
             <section className="recommended-choice" aria-labelledby="recommended-title">
               <div className="recommended-choice__label agent-recommendation-label">
                 <StarFilled size={20} aria-hidden />
-                <span><strong>Agent recommendation</strong><small>Prepared by the Nourish Decision Agent</small></span>
+                <span><strong>Agent recommendation</strong><small>Prepared by the ShareStack Decision Agent</small></span>
                 <Tag type={brief.agent.effective_mode === "live" ? "blue" : "cool-gray"} size="sm">{agentStatusLabel(brief.agent)}</Tag>
               </div>
               <h3 id="recommended-title">{selectedTitle}</h3>
@@ -315,7 +315,7 @@ function EditDialog({ runId, action, initialQuantity, onClose, onApply }: { runI
 
   return (
     <Dialog title="Change quantity" primaryLabel={checking ? "Checking…" : "Recheck plan"} primaryDisabled={!valid || checking} onClose={onClose} onPrimary={() => void recheck()}>
-      <p>Only the quantity can change. Nourish Ops will recheck budget, storage, timing, and authorization before approval.</p>
+      <p>Only the quantity can change. ShareStack will recheck budget, storage, timing, and authorization before approval.</p>
       <label className="field"><span>Quantity (lb)</span><input type="number" value={quantity} min={action.minimum_quantity_lb} max={action.maximum_quantity_lb} step={action.quantity_increment_lb} onChange={(event) => setQuantity(event.target.value)} /><small>{range}</small>{!rangeValid && <span className="field__err">Enter an allowed whole-pound quantity.</span>}</label>
       <TextArea id="edit-reason" labelText="Reason for changing the quantity" maxCount={500} enableCounter value={reason} invalid={!reason.trim()} invalidText="Add a reason before rechecking." onChange={(event) => setReason(event.target.value)} />
       {error && <p className="field__err" role="alert">{error}</p>}

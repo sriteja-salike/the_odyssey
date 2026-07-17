@@ -8,7 +8,7 @@ export default function DraftWorkspace({ item, onAnalyze }: { item?: WorkItem; o
       <header className="journey-intro">
         <Tag type="warm-gray" size="sm">New operations issue</Tag>
         <h1>{item?.presentation.issue.title ?? "Check a new operations issue"}</h1>
-        <p>{item?.presentation.issue.summary ?? "Nourish Ops will check the verified records and identify whether a response is needed."}</p>
+        <p>{item?.presentation.issue.summary ?? "ShareStack will check the verified records and identify whether a response is needed."}</p>
       </header>
 
       <ol className="task-list">
