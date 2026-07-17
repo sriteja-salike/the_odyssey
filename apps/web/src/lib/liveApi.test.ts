@@ -62,4 +62,20 @@ describe("live API fallback boundary", () => {
     expect(run.state).toBe("DRAFT");
     expect(run.scenario_id).toContain("SCN-C");
   });
+
+  it("previews only frozen evaluated quantities after falling back offline", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+    const api = await import("./liveApi");
+    const { getGolden } = await import("./api");
+    const run = await api.createRun("A");
+    const recommendation = getGolden("A").recommended_action;
+
+    const frozen = await api.previewAction(run.run_id, recommendation.action_id, recommendation.requested_quantity_lb);
+    expect(frozen.feasible).toBe(true);
+    expect(frozen.evaluation.cost_usd).toBe(recommendation.cost_usd);
+
+    const custom = await api.previewAction(run.run_id, recommendation.action_id, recommendation.requested_quantity_lb + 1);
+    expect(custom.feasible).toBe(false);
+    expect(custom.evaluation.failed_codes).toContain("OFFLINE_FROZEN_QUANTITY_ONLY");
+  });
 });

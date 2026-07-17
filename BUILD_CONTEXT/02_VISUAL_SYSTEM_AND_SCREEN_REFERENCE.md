@@ -2,65 +2,106 @@
 
 **Authority:** Normative after a visual direction is selected  
 **Current status:** `SELECTED_AND_NORMATIVE`  
-**Build gate:** Cleared — Direction C ("Clinical Calm") selected 2026-07-16 (superseding an initial Direction B pick); frontend implementation may proceed  
+**Build gate:** Cleared — Carbon-based checklist coach selected 2026-07-17; implementation and visual QA may proceed
 **Target frame:** 1440 × 1024 desktop web application  
 
 ---
+
+## 0. Phase 1 selected hybrid direction (normative override)
+
+The Phase 1 visual truth is a hybrid chosen by the user:
+
+- **Primary structure:** `BUILD_CONTEXT/design-references/option-3-checklist-coach.png`
+- **Focused explanation treatment:** `BUILD_CONTEXT/design-references/option-2-plain-language-visual.png`
+
+Option 3 controls the full-page hierarchy: a simple service shell, a vertical three-step journey, one active section, clear completed/current/pending states, and a single dominant action. Option 2 contributes only the compact, plain-language decision visual inside the active step. This override replaces the older persistent recommendation rail, permanent sidebar, dark console header, and global Decision Guide treatment described later in this document.
+
+The target user is Jordan, a frequently interrupted food-bank operations coordinator. The page should feel like a calm task checklist, not a planning dashboard, analyst console, AI chat, or executive command center.
+
+### 0.1 Phase 1 visual system
+
+- **Foundation:** IBM Carbon components and icons, IBM Plex Sans/Mono, Recharts for verified quantitative comparisons.
+- **Palette:** paper white `#fbfaf7`, warm raised surface `#f5f2eb`, charcoal `#25231f`, deep blue action `#174b7a`, ochre attention `#9a6500`, forest completion `#2f6b45`, restrained red breach `#a63a3a`.
+- **Shape:** 8px default radius and 12px emphasized radius; status tags may remain pill-shaped.
+- **Elevation:** flat page and task surfaces; subtle shadow only for dialogs and menus.
+- **Targets:** minimum 44px interaction height; visible keyboard focus; reduced motion honored.
+- **Responsive:** no horizontal scrolling at 1440×1024, 1280px, 200% zoom, or 390×844. The journey remains linear and actions stack on narrow screens.
+
+### 0.2 Screen hierarchy
+
+1. Nourish Ops shell and persistent simulation notice.
+2. Plain-language issue label, headline, and one-sentence explanation.
+3. Three-step task journey.
+4. At most one compact visual (approximately 120–160px high) in the current/completed issue step.
+5. One recommended response and one primary action.
+6. Alternatives, rationale, evidence, assumptions, and technical context only through labeled disclosures.
+
+### 0.3 Scenario visual mapping
+
+| Scenario | Visual |
+|---|---|
+| A | Four-week coverage bars with a labeled minimum and highlighted Aug 10 breach; approved result is a before/after comparison. |
+| B | Refrigerated-capacity comparison for full acceptance, capacity, and recommended partial acceptance. |
+| C | Offer versus target comparison, followed by approved redirected amount. |
+| D | Available budget, combined need, recommended spend, and remaining balance. |
+| E | Stacked source-conflict rows with field, finding, source IDs, and observed values; no quantitative chart. |
+
+All charts have a plain-language summary and an expandable semantic table. There are no gauges, score rings, decorative gradients, custom SVG illustrations, or decorative animation.
 
 ## 1. Selection record
 
 | Field | Value |
 |---|---|
 | Ideation set date | 2026-07-13 |
-| Selected displayed option | Direction C |
-| Selected direction name | Clinical Calm — light, airy, humane operator workspace |
-| Selection feedback | Initially selected Direction B (Control Desk), then changed to C: the dark console read as too technical/engineer-facing. C's light, calm, single-accent treatment is more approachable and usable for a food-bank operator with ~2 minutes. |
-| Final reference asset paths | `BUILD_CONTEXT/visual-references/` (review/approved/abstained/audit to be captured from the built app) |
-| Approved by | User (2026-07-16) |
+| Selected displayed option | Full redesign · Carbon foundation |
+| Selected direction name | Checklist Coach with focused operational visual |
+| Selection feedback | Build around Option 3's simple checklist for a food-bank employee, retaining one useful Option 2-style visual. Use open-source Carbon patterns wherever possible and custom-build only domain-specific presentation. |
+| Final reference asset paths | `BUILD_CONTEXT/design-references/option-3-checklist-coach.png`; `BUILD_CONTEXT/design-references/option-2-plain-language-visual.png`; implementation QA captures in `BUILD_CONTEXT/design-qa/` |
+| Approved by | User (2026-07-17, persona-led full redesign) |
 
-Three independent visual directions (A · Field Brief, B · Control Desk, C · Clinical Calm) were generated from this contract and rendered as the hero Review screen with frozen Scenario A data. The user first picked B, then switched to **Direction C**. The concrete design tokens are frozen in §11 below and are the normative target for frontend implementation.
+The original ideation moved from Control Desk to Clinical Calm. The user then explicitly requested a complete redesign built smartly on an open-source professional UI. **Operational Dossier** retains the calm, humane intent while adopting IBM Carbon for controls, dialogs, navigation, progress, tables, notifications, accessibility behavior, and IBM Plex typography. Custom work is limited to the domain-specific risk narrative, recommendation rail, projection, before/after outcome, and evidence compositions.
 
-## 11. Selected design tokens — Direction C ("Clinical Calm")
+## 11. Selected design tokens — Operational Dossier (Carbon)
 
-Light-native, airy, humane workspace. One confident indigo accent; a single UI sans family, with monospace reserved only for machine record IDs. Plain-language first, generous whitespace, restrained status color. All values are the frozen implementation contract; the built app must use these exact tokens.
+Light-native, editorial operations workspace built on Carbon White. Carbon components own interaction states and accessibility. NourishOps owns the information hierarchy: disruption first, verified recommendation second, human action third, evidence and agent trace on demand.
 
 ### 11.1 Color tokens
 
 | Token | Value | Role |
 |---|---|---|
-| `--bg` | `#FBFBFC` | Page / app ground (near-white, cool bias) |
-| `--appbar` | `#FFFFFF` | Top bar and context strip |
+| `--bg` | `#F4F4F4` | Carbon Gray 10 page ground |
+| `--appbar` | `#161616` | Carbon Gray 100 application header |
 | `--panel` | `#FFFFFF` | Default grouped surface |
-| `--raised` | `#F1F3F6` | Recommendation panel / hover / quiet fills |
-| `--line` | `#E4E7EC` | Default divider/border |
-| `--line-strong` | `#CFD4DB` | Emphasized border, secondary button outline |
-| `--ink` | `#22262B` | Primary text |
-| `--sub` | `#5A626C` | Secondary text, axis/label, expected series |
-| `--action` | `#3D4CB0` | Primary interactive (buttons, links, focus) — indigo, distinct from risk red and success green |
+| `--raised` | `#F8F8F8` | Carbon Gray 10 quiet layer and row hover |
+| `--line` | `#E0E0E0` | Default divider |
+| `--line-strong` | `#A8A8A8` | Emphasized rule and outline |
+| `--ink` | `#161616` | Carbon Gray 100 primary text |
+| `--sub` | `#525252` | Carbon Gray 70 secondary text |
+| `--action` | `#0F62FE` | Carbon Blue 60 primary interaction and conservative series |
 | `--action-ink` | `#FFFFFF` | Text/icon on `--action` fills |
-| `--breach` | `#C0413A` | Hard breach, blocked constraint, minimum threshold line (strongest danger) |
-| `--warn` | `#B07D1E` | Probable supply, low confidence (quieter warning) |
-| `--ok` | `#2F8F6B` | Completed simulated transition (success — never claimed mission impact) |
-| `--series-conservative` | `#3D4CB0` | Chart: conservative projection (primary solid) |
-| `--series-after` | `#2F8F6B` | Chart: with-approved-action projection (named comparison) |
-| `--series-expected` | `#5A626C` | Chart: expected projection (secondary, dashed) |
+| `--breach` | `#DA1E28` | Carbon Red 60 hard breach and blocked constraint |
+| `--warn` | `#8E6A00` | Accessible warning text on pale yellow |
+| `--ok` | `#198038` | Carbon Green 60 completed simulated transition |
+| `--series-conservative` | `#0F62FE` | Chart: conservative projection (primary solid) |
+| `--series-after` | `#198038` | Chart: with-approved-action projection |
+| `--series-expected` | `#8A3FFC` | Chart: expected projection (secondary, dashed) |
 
-Light tints for chips/pills: breach `#F7E5E3`, ok `#E6F2EC`, warn `#F6EEDD`, action `#E7E9F6`. Status/danger colors always ship with text + icon/shape, never color alone. Chart series validated colorblind-safe against the light surface (dataviz `validate_palette.js`): conservative↔after normal-vision ΔE 24.8, all CVD checks pass; the minimum line is a reserved status color carried with a direct "Minimum 1.5" label and a distinct flat-rule shape.
+Light tints use Carbon token equivalents: breach `#FFF1F1`, ok `#DEFBE6`, warn `#FCF4D6`, action `#EDF5FF`. Status color always ships with text or a distinct shape. The minimum line keeps a direct label and differs from every projection series in both color and geometry.
 
 ### 11.2 Typography
 
-- **Families:** UI sans = `ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif`. Monospace (record IDs / rule codes only) = `ui-monospace, "SF Mono", "JetBrains Mono", "Roboto Mono", Menlo, Consolas, monospace`.
+- **Families:** UI sans = Carbon's `IBM Plex Sans`, with `Helvetica Neue`, Arial, sans-serif fallback. Machine records use `IBM Plex Mono`, `SFMono-Regular`, Consolas, monospace.
 - **Numbers use the sans family with `font-variant-numeric: tabular-nums`** for column alignment — not monospace. Mono is reserved for machine identifiers (e.g. `INB-USDA-PROTEIN-104`) and rule codes.
-- Scale: body 14–15px; section headings and labels sentence-case 12–13px (not uppercase eyebrows); risk/decision headings ~24px (concise); primary metric values ~20px.
+- Scale: body 14–16px; operational eyebrows 11px; section headings 16–22px; decision headings 30–48px responsive; primary metric values 24px.
 - Plain language leads; explanation lines ≤ ~65 characters; primary-view prose ≤ 120 words.
 
 ### 11.3 Spacing, shape, elevation, icons
 
-- **Spacing:** 4px base grid — steps 8/12/16/24/32/48; generous — main padding 32/24, card padding 24, column gap 32.
-- **Radii:** 6px (chips, inputs, code tags), 10px (buttons), 14px (panels/cards). `999px` reserved for true status pills, the mode indicator, and compact filters only. No nested cards.
-- **Control height:** ≥ 40px; critical/primary targets 44px.
-- **Elevation:** flat by default — panels use `--panel`/`--raised` + `--line`, not shadow. Shadow only for dialogs, menus, and genuinely floating panels: `0 24px 60px -30px rgba(20,24,40,.35)`.
-- **Icons:** Lucide only, 16px default (13–14px inline with text), ~2px stroke. Icons accompany text for consequential status; never replace it. No emoji, sparkles, robot/brain glyphs.
+- **Spacing:** Carbon 4px base grid — 8/12/16/24/32/40/48/64. Main padding 32px desktop / 16px mobile.
+- **Radii:** Carbon-square by default. Status tags may be pill-shaped; domain panels use rules and color bands rather than rounded card decoration.
+- **Control height:** Carbon sizes; critical decision actions are 48px.
+- **Elevation:** flat by default. Shadow is limited to the sticky recommendation dossier, dialogs, menus, and the Decision Guide panel.
+- **Icons:** Carbon Icons for Carbon controls. Existing Lucide domain/status marks may remain until replaced, but no custom SVG, emoji, or AI-themed decoration is introduced.
 
 ### 11.4 Component states (required in the component reference)
 

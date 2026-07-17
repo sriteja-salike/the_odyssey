@@ -1,82 +1,59 @@
-/* Draft workspace (01 §4.1, §6.2): scenario setup, the imported (unapplied)
-   disruption notice, baseline category context, and the single primary action
-   `Analyze disruption`. No fabricated recommendation. */
-import { AlertTriangle, ICON_SM } from "./icons";
-import { getNotice, getBaselineContext, getOverlay, type ScenarioLetter } from "../lib/api";
-import { CATEGORY_LABEL } from "../lib/categories";
-import { lb, weeks, date } from "../lib/format";
+import { Button, Tag } from "@carbon/react";
+import { ArrowRight, Document, Locked } from "@carbon/icons-react";
+import { getNotice, getOverlay, type ScenarioLetter } from "../lib/api";
+import { date } from "../lib/format";
 
 export default function DraftWorkspace({ letter, onAnalyze }: { letter: ScenarioLetter; onAnalyze: () => void }) {
   const overlay = getOverlay(letter);
   const notice = getNotice(letter);
-  const baseline = getBaselineContext(letter);
 
   return (
-    <div className="workspace">
-      <div className="col">
-        <section>
-          <h1 className="risk-title" style={{ marginTop: 0 }}>{overlay.display_name}</h1>
-          <p className="lead">
-            A synthetic operations notice just arrived. Aggregate pounds look healthy —
-            analyze it to project each category forward and surface any coming shortage.
-          </p>
-          <div style={{ marginTop: "var(--s6)" }}>
-            <button className="btn btn--primary" onClick={onAnalyze}>Analyze disruption</button>
-          </div>
-        </section>
+    <div className="journey-shell journey-shell--draft">
+      <header className="journey-intro">
+        <Tag type="warm-gray" size="sm">New supply issue</Tag>
+        <h1>{overlay.display_name}</h1>
+        <p>Review the new information, then let Nourish Ops check how it affects the next four weeks.</p>
+      </header>
 
-        {notice && (
-          <section className="card">
-            <h2 className="sec">Imported disruption notice</h2>
-            <div className="notice">
-              <div className="notice__meta">
-                <span>{notice.title}</span>
-                <span className="hint">Received {date(notice.recorded_at.slice(0, 10))} · synthetic · untrusted text</span>
-              </div>
-              <p className="notice__body">{notice.body}</p>
-              <p className="hint" style={{ marginTop: "var(--s2)" }}>
-                Not yet applied. The agent will extract only the fields present in this text.
-              </p>
+      <ol className="task-list">
+        <li className="task-step task-step--active">
+          <div className="task-step__marker" aria-hidden>1</div>
+          <div className="task-step__body">
+            <div className="task-step__title"><div><span>Step 1</span><h2>Understand the issue</h2></div><Tag type="blue">Current</Tag></div>
+            {notice && (
+              <article className="incoming-notice">
+                <Document size={22} aria-hidden />
+                <div>
+                  <strong>{notice.title}</strong>
+                  <span>Received {date(notice.recorded_at.slice(0, 10))} · synthetic notice</span>
+                  <p>{notice.body}</p>
+                </div>
+              </article>
+            )}
+            <div className="task-primary-row">
+              <Button renderIcon={ArrowRight} onClick={onAnalyze}>Check impact</Button>
+              <span>Usually takes a few seconds</span>
             </div>
-          </section>
-        )}
-      </div>
+          </div>
+        </li>
 
-      <aside className="col">
-        <section className="card">
-          <h2 className="sec">Current coverage</h2>
-          <p className="hint" style={{ marginTop: "-6px", marginBottom: "var(--s3)" }}>
-            {lb(baseline.total_on_hand_lb)} on hand across {baseline.categories.length} categories.
-          </p>
-          <table className="table">
-            <thead>
-              <tr>
-                <th scope="col">Category</th>
-                <th scope="col" className="num">On hand</th>
-                <th scope="col" className="num">Coverage</th>
-              </tr>
-            </thead>
-            <tbody>
-              {baseline.categories.map((c) => (
-                <tr key={c.category_id}>
-                  <td>{CATEGORY_LABEL[c.category_id]}{c.essential && <span className="hint"> · essential</span>}</td>
-                  <td className="num">{lb(c.on_hand_lb)}</td>
-                  <td className="num">
-                    {c.coverage_weeks != null ? weeks(c.coverage_weeks) : "—"}
-                    {c.coverage_weeks != null && (
-                      <span className={`dotstat ${c.healthy ? "dotstat--ok" : "dotstat--risk"}`} aria-hidden />
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p className="hint" style={{ marginTop: "var(--s3)" }}>
-            <AlertTriangle size={ICON_SM} aria-hidden style={{ verticalAlign: "-2px" }} /> Totals can hide a
-            single category about to run short — that is what the analysis checks.
-          </p>
-        </section>
-      </aside>
+        <PendingStep number={2} title="Choose a response" copy="A recommended next step will appear after the impact check." />
+        <PendingStep number={3} title="Confirm" copy="You will review every consequence before anything is recorded." />
+      </ol>
+
+      <p className="journey-reassurance"><Locked size={16} aria-hidden /> Simulation only — no real order will be placed.</p>
     </div>
+  );
+}
+
+function PendingStep({ number, title, copy }: { number: number; title: string; copy: string }) {
+  return (
+    <li className="task-step task-step--pending" aria-disabled="true">
+      <div className="task-step__marker" aria-hidden>{number}</div>
+      <div className="task-step__body">
+        <div className="task-step__title"><div><span>Step {number}</span><h2>{title}</h2></div><Tag type="cool-gray">Pending</Tag></div>
+        <p>{copy}</p>
+      </div>
+    </li>
   );
 }

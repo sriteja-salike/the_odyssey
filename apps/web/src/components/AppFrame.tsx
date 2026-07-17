@@ -1,15 +1,24 @@
-/* Persistent application frame (01 §6.1, 02 §4): wordmark, nav, scenario/run
-   context, mode indicator, clean-run control, and the persistent simulation
-   notice — present on every route. */
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { AlertTriangle, MessageSquare, ICON_SM } from "./icons";
+import {
+  Header,
+  HeaderGlobalBar,
+  HeaderMenu,
+  HeaderMenuItem,
+  HeaderName,
+  HeaderNavigation,
+  OverflowMenu,
+  OverflowMenuItem,
+  Select,
+  SelectItem,
+  Tag,
+} from "@carbon/react";
+import { Information, OverflowMenuVertical, WarningAlt } from "@carbon/icons-react";
 import { SCENARIOS, getOverlay, type ScenarioLetter } from "../lib/api";
 import { createRun, getConnectionMode, subscribeConnectivity } from "../lib/liveApi";
 import { date } from "../lib/format";
-import Assistant from "./Assistant";
+import Dialog from "./Dialog";
 
-// Exact persistent notice — verbatim from 00_BUILD_CONTRACT.md.
 const SIM_NOTICE =
   "Simulation only — All organizations, records, quantities, costs, and outcomes in this prototype are synthetic.";
 
@@ -17,109 +26,135 @@ interface Props {
   runId: string;
   letter: ScenarioLetter;
   active: "decision" | "compare" | "audit";
-  onStartClean?: () => void;
+  onStartClean?: () => void | Promise<void>;
   children: React.ReactNode;
 }
 
 export default function AppFrame({ runId, letter, active, onStartClean, children }: Props) {
   const navigate = useNavigate();
   const overlay = getOverlay(letter);
-  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [scenarioOpen, setScenarioOpen] = useState(false);
+  const [pendingScenario, setPendingScenario] = useState<ScenarioLetter>(letter);
+  const [working, setWorking] = useState(false);
   const connectionMode = useSyncExternalStore(subscribeConnectivity, getConnectionMode, getConnectionMode);
   const offline = connectionMode === "OFFLINE_DEMO";
 
-  async function defaultStartClean() {
-    const run = await createRun(letter, runId);
-    navigate(`/runs/${run.run_id}`);
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, [active, runId]);
+
+  async function startClean() {
+    setWorking(true);
+    try {
+      if (onStartClean) await onStartClean();
+      else {
+        const run = await createRun(letter, runId);
+        navigate(`/runs/${run.run_id}`);
+      }
+      setResetOpen(false);
+    } finally {
+      setWorking(false);
+    }
   }
 
-  async function onScenarioChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const next = e.target.value as ScenarioLetter;
-    if (next === letter) return;
-    const run = await createRun(next);
-    navigate(`/runs/${run.run_id}`);
+  async function switchScenario() {
+    setWorking(true);
+    try {
+      const run = await createRun(pendingScenario, runId);
+      setScenarioOpen(false);
+      navigate(`/runs/${run.run_id}`);
+    } finally {
+      setWorking(false);
+    }
   }
 
   return (
-    <div className="app">
-      <header className="appbar">
-        <div className="brand">
-          <span className="brand__name">NourishOps</span>
-          <span className="brand__desc">Nutrition-Aware Supply Resilience</span>
-        </div>
-        <nav className="nav" aria-label="Primary">
-          <NavLink to={`/runs/${runId}`} end aria-current={active === "decision" ? "page" : undefined}>
-            Decision
-          </NavLink>
-          {letter === "A" && (
-            <NavLink to={`/runs/${runId}/compare`} aria-current={active === "compare" ? "page" : undefined}>
-              Compare
-            </NavLink>
-          )}
-          <NavLink to={`/runs/${runId}/audit`} aria-current={active === "audit" ? "page" : undefined}>
-            Audit
-          </NavLink>
-        </nav>
-        <div className="appbar__right">
-          <span
-            className={`mode ${offline ? "mode--offline" : ""}`}
-            title={offline
-              ? "The backend is unreachable. Complete frozen scenario outputs are being used for this demo."
-              : "Math and ranking are computed by the deterministic engine; AI roles are read-only."}
+    <div className="app-shell">
+      <Header aria-label="Nourish Ops" className="app-header">
+        <HeaderName as={NavLink} to={`/runs/${runId}`} prefix="Nourish ">Ops</HeaderName>
+        <HeaderNavigation aria-label="Primary navigation">
+          <HeaderMenuItem as={NavLink} to={`/runs/${runId}`} end isActive={active === "decision"}>Today</HeaderMenuItem>
+          <HeaderMenu
+            aria-label="Records"
+            menuLinkName="Records"
+            isActive={active === "compare" || active === "audit"}
           >
-            <span className="dot" />
-            {offline ? "Offline demo · frozen results" : "Live verified · deterministic authority"}
-          </span>
-          <button className="btn btn--secondary btn--sm" onClick={onStartClean ?? defaultStartClean}>
-            Start clean run
-          </button>
-          <button
-            className="btn btn--secondary btn--sm"
-            onClick={() => setAssistantOpen((v) => !v)}
-            aria-pressed={assistantOpen}
+            {letter === "A" && <HeaderMenuItem as={NavLink} to={`/runs/${runId}/compare`}>Compare this decision</HeaderMenuItem>}
+            <HeaderMenuItem as={NavLink} to={`/runs/${runId}/audit`}>Audit record</HeaderMenuItem>
+          </HeaderMenu>
+        </HeaderNavigation>
+        <HeaderGlobalBar>
+          <OverflowMenu
+            aria-label="Decision options"
+            renderIcon={OverflowMenuVertical}
+            flipped
+            className="header-overflow"
           >
-            <MessageSquare size={ICON_SM} aria-hidden /> Decision guide
-          </button>
-        </div>
-      </header>
+            <OverflowMenuItem itemText="Switch scenario" onClick={() => {
+              setPendingScenario(letter);
+              setScenarioOpen(true);
+            }} />
+            <OverflowMenuItem itemText="Start clean run" onClick={() => setResetOpen(true)} />
+          </OverflowMenu>
+        </HeaderGlobalBar>
+      </Header>
 
-      <div className="simbar" role="note">
-        <AlertTriangle size={ICON_SM} aria-hidden />
+      <nav className="mobile-primary-nav" aria-label="Primary navigation">
+        <NavLink to={`/runs/${runId}`} end>Today</NavLink>
+        {letter === "A" && <NavLink className="mobile-compare-link" to={`/runs/${runId}/compare`}>Compare</NavLink>}
+        <NavLink to={`/runs/${runId}/audit`}>Audit</NavLink>
+        <button type="button" onClick={() => setScenarioOpen(true)}>Switch scenario</button>
+      </nav>
+
+      <div className="simulation-note" role="note">
+        <WarningAlt size={18} aria-hidden />
         <span>{SIM_NOTICE}</span>
       </div>
 
-      <div className="ctx">
-        <span>
-          <span className="ctx__k">Scenario </span>
-          <span className="ctx__v">{overlay.display_name}</span>
-        </span>
-        <span className="ctx__sep">·</span>
-        <span>
-          <span className="ctx__k">As of </span>
-          <span className="ctx__v">{date(overlay.planning_date)}</span>
-        </span>
-        <span className="ctx__sep">·</span>
-        <span>
-          <span className="ctx__k">Run </span>
-          <span className="ctx__v mono">{runId} · synthetic</span>
-        </span>
-        <span className="ctx__sep">·</span>
-        <label>
-          <span className="ctx__k">Scenario </span>
-          <select value={letter} onChange={onScenarioChange} aria-label="Select scenario">
-            {SCENARIOS.map((s) => (
-              <option key={s.letter} value={s.letter}>
-                {s.label}
-                {s.inScope ? "" : " (engine-only)"}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+      <details className="shell-details">
+        <summary><Information size={16} aria-hidden /> Decision details</summary>
+        <div className="shell-details__content">
+          <span><small>Scenario</small><strong>{overlay.display_name}</strong></span>
+          <span><small>Planning date</small><strong>{date(overlay.planning_date)}</strong></span>
+          <span><small>Run</small><strong className="mono">{runId}</strong></span>
+          <Tag type={offline ? "warm-gray" : "green"} size="sm">{offline ? "Offline verified" : "Live verified"}</Tag>
+        </div>
+      </details>
 
       <main className="main">{children}</main>
 
-      {assistantOpen && <Assistant letter={letter} runId={runId} onClose={() => setAssistantOpen(false)} />}
+      {resetOpen && (
+        <Dialog
+          title="Start a clean run?"
+          primaryLabel={working ? "Starting…" : "Start clean run"}
+          primaryDisabled={working}
+          onPrimary={() => void startClean()}
+          onClose={() => setResetOpen(false)}
+        >
+          <p>Start again from the original synthetic fixture. This run and its complete audit record will remain unchanged.</p>
+        </Dialog>
+      )}
+
+      {scenarioOpen && (
+        <Dialog
+          title="Switch scenario?"
+          primaryLabel={working ? "Opening…" : "Create new scenario run"}
+          primaryDisabled={working || pendingScenario === letter}
+          onPrimary={() => void switchScenario()}
+          onClose={() => setScenarioOpen(false)}
+        >
+          <p>Choose another synthetic situation. Your current run and its records stay unchanged.</p>
+          <Select
+            id="scenario-switcher"
+            labelText="Scenario"
+            value={pendingScenario}
+            onChange={(event) => setPendingScenario(event.target.value as ScenarioLetter)}
+          >
+            {SCENARIOS.map((scenario) => <SelectItem key={scenario.letter} value={scenario.letter} text={scenario.label} />)}
+          </Select>
+        </Dialog>
+      )}
     </div>
   );
 }

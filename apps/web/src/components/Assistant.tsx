@@ -2,16 +2,16 @@
    it has no calculation, ranking, approval, or execution authority. */
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { X, SendHorizontal, ICON_SM } from "./icons";
-import { activeRun, createRun, getRun, type LiveRun } from "../lib/liveApi";
+import { Button } from "@carbon/react";
+import { Close, Send } from "@carbon/icons-react";
+import { activeRun, getRun, type LiveRun } from "../lib/liveApi";
 import { getOverlay, SCENARIOS, type ScenarioLetter } from "../lib/api";
 import { lb, usd } from "../lib/format";
 
 interface Message { role: "user" | "assistant"; text: string }
 type AssistantAction =
   | { type: "switch"; letter: ScenarioLetter }
-  | { type: "navigate"; to: string }
-  | { type: "clean" };
+  | { type: "navigate"; to: string };
 
 const GREETING =
   "I explain this run from its pinned evidence, deterministic result, and recorded decision trace. I can navigate, but I cannot recalculate, approve, or execute an action.";
@@ -56,11 +56,6 @@ export default function Assistant({
       navigate(`/runs/${run.run_id}`);
       return;
     }
-    if (action.type === "clean") {
-      const run = await createRun(letter, runId);
-      navigate(`/runs/${run.run_id}`);
-      return;
-    }
     navigate(action.to);
   }
 
@@ -99,9 +94,7 @@ export default function Assistant({
           <div className="assistant__title">Decision guide</div>
           <div className="assistant__sub">Grounded answers, zero decision authority</div>
         </div>
-        <button className="btn btn--ghost btn--sm" onClick={onClose} aria-label="Close decision guide">
-          <X size={ICON_SM} aria-hidden />
-        </button>
+        <Button hasIconOnly kind="ghost" size="sm" renderIcon={Close} iconDescription="Close decision guide" onClick={onClose} />
       </header>
 
       <div className="assistant__grounding" aria-live="polite">
@@ -133,9 +126,7 @@ export default function Assistant({
           aria-label="Ask about this decision"
           disabled={busy}
         />
-        <button className="btn btn--primary btn--sm" type="submit" aria-label="Send" disabled={busy || !input.trim()}>
-          <SendHorizontal size={ICON_SM} aria-hidden />
-        </button>
+        <Button hasIconOnly size="md" type="submit" renderIcon={Send} iconDescription="Send" disabled={busy || !input.trim()} />
       </form>
     </aside>
   );
@@ -181,7 +172,7 @@ export function respond(
     return { reply: "Opening the append-only audit record for this run.", action: { type: "navigate", to: `/runs/${run.run_id}/audit` } };
   }
   if (has("clean run", "new run", "start over", "reset", "restart")) {
-    return { reply: "Starting a clean child run. This run and its audit history remain unchanged.", action: { type: "clean" } };
+    return { reply: "Use “Start a clean run” in the header so you can review and confirm the reset. I remain read-only and will not create a run from this guide." };
   }
   if (has("back to decision", "decision workspace", "go back")) {
     return { reply: "Returning to the decision workspace.", action: { type: "navigate", to: `/runs/${run.run_id}` } };

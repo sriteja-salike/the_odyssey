@@ -1,399 +1,178 @@
-/* Result workspace (01 §4.6–4.8, §6.4): the committed decision outcome.
-   APPROVED shows before/after heal; REJECTED/DEFERRED keep the risk and state the
-   projection is unchanged. Simulation-only note; comparison + audit links. */
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Check, CircleAlert, ICON, ICON_SM } from "./icons";
-import { getGolden, getActionMap, type ScenarioLetter } from "../lib/api";
-import { CATEGORY_LABEL } from "../lib/categories";
-import { lb, usd, weeks, wos } from "../lib/format";
-import type { Decision } from "../lib/runState";
+import { Button, Tag, TextArea } from "@carbon/react";
+import { CheckmarkFilled, Locked, Renew, WarningAlt } from "@carbon/icons-react";
+import type { ScenarioLetter } from "../lib/api";
 import {
   submitFeedback,
   submitOutcomeFeedback,
   type DecisionBrief,
   type LiveExecution,
 } from "../lib/liveApi";
+import type { Decision } from "../lib/runState";
+import { lb, usd } from "../lib/format";
+import DecisionVisual from "./DecisionVisual";
 
-const TOTAL_BUDGET = 20000; // synthetic budget cap (golden BUDGET limit).
-
-export default function ResultWorkspace({
-  letter, runId, decision, execution, feedbackRecorded = false,
-  outcomeRecorded = false, brief, onReset,
-}: {
+interface Props {
   letter: ScenarioLetter;
-  runId: string;
-  decision: Decision;
-  execution?: LiveExecution;
-  feedbackRecorded?: boolean;
-  outcomeRecorded?: boolean;
-  brief?: DecisionBrief;
-  onReset: () => void;
-}) {
-  const golden = getGolden(letter);
-  const actions = getActionMap(golden.scenario_id);
-  const risk = golden.risks.find((r) => r.is_primary) ?? golden.risks[0];
-  const catLabel = CATEGORY_LABEL[risk.category_id];
-  const action = actions[decision.actionId];
-
-  if (letter !== "A" && brief) {
-    return (
-      <GeneralResult
-        brief={brief}
-        runId={runId}
-        decision={decision}
-        execution={execution}
-        feedbackRecorded={feedbackRecorded}
-        outcomeRecorded={outcomeRecorded}
-        onReset={onReset}
-      />
-    );
-  }
-
-  const links = (
-    <div className="actions">
-      <Link className="btn btn--secondary" to={`/runs/${runId}/compare`}>View comparison</Link>
-      <Link className="btn btn--secondary" to={`/runs/${runId}/audit`}>View audit record</Link>
-      <button className="btn btn--ghost" onClick={onReset}>Start clean run</button>
-    </div>
-  );
-  const followup = (
-    <>
-      {execution && <ExecutionCard execution={execution} />}
-      {execution && <ActionOutcomeCard runId={runId} outcomeRecorded={outcomeRecorded} />}
-      <FeedbackCard runId={runId} feedbackRecorded={feedbackRecorded} />
-    </>
-  );
-
-  if (decision.kind === "reject") {
-    return (
-      <div className="stack" style={{ maxWidth: 780 }}>
-        <section>
-          <span className="pill pill--breach"><CircleAlert size={ICON} aria-hidden /> Recommendation rejected</span>
-          <h1 className="risk-title">The recommendation was not applied</h1>
-          <p className="lead">
-            The projection is unchanged — {catLabel.toLowerCase()} still runs short the week of the
-            breach. The rejection and your reason are recorded.
-          </p>
-        </section>
-        {decision.reason && (
-          <section className="card"><h2 className="sec">Manager reason</h2><p>{decision.reason}</p></section>
-        )}
-        {followup}
-        {links}
-      </div>
-    );
-  }
-
-  if (decision.kind === "defer") {
-    return (
-      <div className="stack" style={{ maxWidth: 780 }}>
-        <section>
-          <span className="pill" style={{ background: "var(--warn-tint)", color: "var(--warn)" }}>
-            <CircleAlert size={ICON} aria-hidden /> Decision deferred
-          </span>
-          <h1 className="risk-title">Decision deferred — projection unchanged</h1>
-          <p className="lead">The risk remains open. No action was simulated.</p>
-        </section>
-        {decision.reason && (
-          <section className="card"><h2 className="sec">Deferral note</h2><p>{decision.reason}</p></section>
-        )}
-        {followup}
-        {links}
-      </div>
-    );
-  }
-
-  // APPROVE / EDIT-APPROVE
-  const rec = golden.recommended_action;
-  const qty = decision.quantityLb;
-  const cost = action ? qty * action.unit_price_usd_per_lb : Number(rec.cost_usd);
-  const remaining = TOTAL_BUDGET - cost;
-  const isRecommendedDefault =
-    decision.kind === "approve" && decision.actionId === rec.action_id && qty === rec.requested_quantity_lb;
-
-  if (isRecommendedDefault) {
-    // Exact recommended plan — the golden carries the verified full-heal after-state.
-    const beforeWos = wos(risk.conservative_end_wos_at_breach);
-    const beforeInv = risk.conservative_end_inventory_lb_at_breach;
-    return (
-      <div className="stack" style={{ maxWidth: 900 }}>
-        <section>
-          <span className="pill pill--ok"><Check size={ICON} aria-hidden /> Simulation updated</span>
-          <h1 className="risk-title">{catLabel} coverage restored in the simulation</h1>
-          <p className="lead">
-            {action?.display_name ?? decision.actionId} was applied to this synthetic run.{" "}
-            {catLabel} coverage at the breach week rises from{" "}
-            <span className="hot hot--danger">{beforeWos} weeks</span> to{" "}
-            <span className="hot" style={{ color: "var(--ok)" }}>{weeks(risk.target_weeks_of_supply)}</span>.
-          </p>
-          <p className="hint"><Check size={ICON_SM} aria-hidden style={{ verticalAlign: "-2px" }} /> No external action was taken.</p>
-        </section>
-        <section className="card">
-          <h2 className="sec">Before / after at the breach week</h2>
-          <div className="beforeafter">
-            <BA lab={`${catLabel} coverage`} before={`${beforeWos} weeks`} after={`${weeks(risk.target_weeks_of_supply)}`} good />
-            <BA lab="Ending inventory" before={lb(beforeInv)} after={lb(risk.target_end_inventory_lb)} good />
-            <BA lab="Gap to target" before={lb(risk.gap_to_target_lb)} after={lb(0)} good />
-            <BA lab="Budget remaining" before={usd(TOTAL_BUDGET)} after={usd(remaining)} />
-          </div>
-          <p className="hint" style={{ marginTop: "var(--s4)" }}>
-            Simulated cost {usd(cost)} for {lb(qty)}.{" "}
-            {golden.projections.recommended_action_after.remaining_open_risk_ids.length === 0
-              ? "No category remains below its minimum in the four-week view."
-              : "Some risks remain open — see the comparison."}
-          </p>
-        </section>
-        {followup}
-        {links}
-      </div>
-    );
-  }
-
-  // Non-recommended or edited plan: report only what we can verify without the
-  // engine — cost, budget, and gap reduction — and don't fabricate coverage.
-  const gap = Number(risk.gap_to_target_lb);
-  const evalRow = golden.action_evaluations.find((e) => e.action_id === decision.actionId);
-  const gapReduction =
-    action?.action_type === "PURCHASE"
-      ? Math.min(qty, gap)
-      : Number(evalRow?.gap_reduction_lb ?? evalRow?.expected_usable_quantity_lb ?? 0);
-  const residual = Math.max(0, gap - gapReduction);
-
-  return (
-    <div className="stack" style={{ maxWidth: 900 }}>
-      <section>
-        <span className="pill pill--ok"><Check size={ICON} aria-hidden /> Simulation updated</span>
-        <h1 className="risk-title">{action?.display_name ?? decision.actionId} applied</h1>
-        <p className="lead">
-          Applied to this synthetic run — it closes{" "}
-          <span className="hot" style={{ color: "var(--ok)" }}>{lb(gapReduction)}</span> of the {lb(gap)}{" "}
-          {catLabel.toLowerCase()} gap{residual > 0 ? <>, leaving <span className="hot hot--danger">{lb(residual)}</span> still short</> : null}.
-        </p>
-        <p className="hint"><Check size={ICON_SM} aria-hidden style={{ verticalAlign: "-2px" }} /> No external action was taken.</p>
-      </section>
-      <section className="card">
-        <h2 className="sec">Result at the breach week</h2>
-        <div className="beforeafter">
-          <BA lab={`${catLabel} gap to target`} before={lb(gap)} after={lb(residual)} good={residual === 0} />
-        </div>
-        <p className="hint" style={{ marginTop: "var(--s4)" }}>
-          Simulated cost {usd(cost)} for {lb(qty)} · budget remaining {usd(remaining)}.
-        </p>
-        <p className="hint">
-          {decision.reason ? `Manager reason: ${decision.reason.replace(/\.\s*$/, "")}. ` : ""}
-          The full four-week coverage projection for a non-recommended plan is computed by the deterministic engine.
-          {residual > 0 ? " Some risk remains open — see the comparison." : ""}
-        </p>
-      </section>
-      {followup}
-      {links}
-    </div>
-  );
-}
-
-function GeneralResult({
-  brief, runId, decision, execution, feedbackRecorded, outcomeRecorded, onReset,
-}: {
-  brief: DecisionBrief;
   runId: string;
   decision: Decision;
   execution?: LiveExecution;
   feedbackRecorded: boolean;
   outcomeRecorded: boolean;
+  brief?: DecisionBrief;
   onReset: () => void;
-}) {
-  const action = brief.recommendation?.action;
-  const links = (
-    <div className="actions">
-      <Link className="btn btn--secondary" to={`/runs/${runId}/audit`}>View audit record</Link>
-      <button className="btn btn--ghost" onClick={onReset}>Start clean run</button>
-    </div>
-  );
-  if (decision.kind === "reject" || decision.kind === "defer") {
-    const rejected = decision.kind === "reject";
-    return (
-      <div className="stack" style={{ maxWidth: 780 }}>
-        <section>
-          <span className="pill pill--breach"><CircleAlert size={ICON} aria-hidden /> {rejected ? "Recommendation rejected" : "Decision deferred"}</span>
-          <h1 className="risk-title">{rejected ? "The recommendation was not applied" : "The risk remains open"}</h1>
-          <p className="lead">No action intent or execution receipt was created.</p>
-        </section>
-        {decision.reason && <section className="card"><h2 className="sec">Manager note</h2><p>{decision.reason}</p></section>}
-        <FeedbackCard runId={runId} feedbackRecorded={feedbackRecorded} />
-        {links}
-      </div>
-    );
-  }
+}
+
+export default function ResultWorkspace(props: Props) {
+  const { decision } = props;
+  if (decision.kind === "reject" || decision.kind === "defer") return <UnappliedResult {...props} />;
+  return <ApprovedResult {...props} />;
+}
+
+function ApprovedResult({ letter, runId, decision, execution, feedbackRecorded, outcomeRecorded, brief, onReset }: Props) {
+  const action = [brief?.recommendation?.action, ...(brief?.alternatives ?? [])]
+    .find((item) => item?.action_id === decision.actionId) ?? brief?.recommendation?.action;
+
   return (
-    <div className="stack" style={{ maxWidth: 900 }}>
-      <section>
-        <span className="pill pill--ok"><Check size={ICON} aria-hidden /> Simulation completed</span>
-        <h1 className="risk-title">{action?.display_name ?? decision.actionId}</h1>
-        <p className="lead">
-          The approved recommendation was converted into a durable action intent and completed by the synthetic operations gateway.
-        </p>
-        <p className="hint"><Check size={ICON_SM} aria-hidden style={{ verticalAlign: "-2px" }} /> No external action was taken.</p>
-      </section>
-      {action && (
-        <section className="card">
-          <h2 className="sec">Approved plan</h2>
-          <div className="rec__figures">
-            <ResultFig lab="Quantity" val={lb(action.requested_quantity_lb)} />
-            <ResultFig lab="Simulated cost" val={usd(action.cost_usd)} />
-            <ResultFig lab="Confidence" val={brief.recommendation?.confidence_label ?? "—"} />
+    <div className="journey-shell result-journey">
+      <header className="journey-intro journey-intro--compact result-hero">
+        <Tag type="green" size="sm">Simulation complete</Tag>
+        <h1>Action completed in simulation</h1>
+        <p>{action?.display_name ?? decision.actionId} was recorded for this synthetic run. No external action was taken.</p>
+      </header>
+
+      <ol className="task-list task-list--complete">
+        <CompletedStep number={1} title="Understand the issue" copy="The impact check was completed using the frozen source records." />
+        <CompletedStep number={2} title="Choose a response" copy={action?.display_name ?? decision.actionId} />
+        <li className="task-step task-step--complete task-step--result">
+          <div className="task-step__marker"><CheckmarkFilled size={20} aria-hidden /></div>
+          <div className="task-step__body">
+            <div className="task-step__title"><div><span>Step 3</span><h2>Confirm</h2></div><Tag type="green">Complete</Tag></div>
+            <dl className="result-summary">
+              <div><dt>Quantity</dt><dd>{lb(decision.quantityLb)}</dd></div>
+              <div><dt>Simulated cost</dt><dd>{usd(execution?.cost_usd ?? action?.cost_usd ?? "0")}</dd></div>
+              <div><dt>External action</dt><dd>Not performed</dd></div>
+            </dl>
+            <DecisionVisual letter={letter} result compact />
           </div>
-        </section>
-      )}
-      {execution && <ExecutionCard execution={execution} />}
-      {execution && <ActionOutcomeCard runId={runId} outcomeRecorded={outcomeRecorded} />}
-      <FeedbackCard runId={runId} feedbackRecorded={feedbackRecorded} />
-      {links}
+        </li>
+      </ol>
+
+      <OutcomeFeedback runId={runId} recorded={outcomeRecorded} />
+
+      <details className="plain-disclosure recommendation-feedback-disclosure">
+        <summary>Give feedback on this recommendation</summary>
+        <RecommendationFeedback runId={runId} recorded={feedbackRecorded} />
+      </details>
+
+      <details className="plain-disclosure">
+        <summary>Decision details</summary>
+        <div className="disclosure-content technical-details">
+          {execution ? (
+            <dl>
+              <div><dt>Receipt</dt><dd className="mono">{execution.execution_id}</dd></div>
+              <div><dt>Status</dt><dd>Completed in simulation</dd></div>
+              <div><dt>Target</dt><dd>{execution.target_system}</dd></div>
+              <div><dt>External write</dt><dd>{execution.external_write_performed ? "Completed" : "Not performed"}</dd></div>
+            </dl>
+          ) : <p>No execution receipt was returned.</p>}
+          <div className="record-links">
+            {letter === "A" && <Button as={Link} kind="tertiary" size="sm" to={`/runs/${runId}/compare`}>Compare responses</Button>}
+            <Button as={Link} kind="tertiary" size="sm" to={`/runs/${runId}/audit`}>Open audit record</Button>
+          </div>
+        </div>
+      </details>
+
+      <div className="result-actions"><Button kind="ghost" renderIcon={Renew} onClick={onReset}>Start clean run</Button></div>
+      <p className="journey-reassurance"><Locked size={16} aria-hidden /> Simulation only — no real order was placed.</p>
     </div>
   );
 }
 
-function ResultFig({ lab, val }: { lab: string; val: string }) {
-  return <div className="fig"><div className="fig__lab">{lab}</div><div className="fig__num">{val}</div></div>;
-}
-
-function ExecutionCard({ execution }: { execution: LiveExecution }) {
+function UnappliedResult({ runId, decision, feedbackRecorded, onReset }: Props) {
+  const rejected = decision.kind === "reject";
   return (
-    <section className="card execution-card">
-      <div>
-        <span className="pill pill--ok"><Check size={ICON_SM} aria-hidden /> Action receipt recorded</span>
-        <h2 className="execution-card__title">Action completed in simulation</h2>
-        <p className="hint">
-          The recommendation has been converted into an executable {execution.execution_type.toLowerCase().replaceAll("_", " ")}.
-          In a production connection, this is the handoff to the authorized operations system.
-        </p>
-      </div>
-      <dl className="execution-card__facts">
-        <div><dt>Request ID</dt><dd className="mono">{execution.execution_id}</dd></div>
-        <div><dt>Status</dt><dd>{execution.status === "SIMULATED_COMPLETED" ? "Completed in simulation" : execution.status}</dd></div>
-        <div><dt>Target</dt><dd>{execution.target_system}</dd></div>
-        <div><dt>External write</dt><dd>{execution.external_write_performed ? "Completed" : "Not performed"}</dd></div>
-      </dl>
-    </section>
+    <div className="journey-shell result-journey">
+      <header className="journey-intro journey-intro--compact">
+        <Tag type="warm-gray" size="sm">{rejected ? "Recommendation rejected" : "Decision deferred"}</Tag>
+        <h1>{rejected ? "The recommendation was not applied" : "The risk remains open"}</h1>
+        <p>No simulated action or external action was performed.</p>
+      </header>
+      <ol className="task-list">
+        <CompletedStep number={1} title="Understand the issue" copy="The impact check was completed." />
+        <CompletedStep number={2} title="Choose a response" copy="The recommendation was reviewed by a manager." />
+        <li className="task-step task-step--blocked"><div className="task-step__marker"><WarningAlt size={20} aria-hidden /></div><div className="task-step__body"><div className="task-step__title"><div><span>Step 3</span><h2>Confirm</h2></div><Tag type="warm-gray">Recorded</Tag></div><p>{rejected ? "The recommendation was rejected." : "The decision was deferred for later review."}</p>{decision.reason && <blockquote>{decision.reason}</blockquote>}</div></li>
+      </ol>
+      <details className="plain-disclosure recommendation-feedback-disclosure"><summary>Give feedback on this recommendation</summary><RecommendationFeedback runId={runId} recorded={feedbackRecorded} /></details>
+      <div className="result-actions"><Button as={Link} kind="tertiary" to={`/runs/${runId}/audit`}>Open audit record</Button><Button kind="ghost" renderIcon={Renew} onClick={onReset}>Start clean run</Button></div>
+      <p className="journey-reassurance"><Locked size={16} aria-hidden /> No external action was taken.</p>
+    </div>
   );
 }
 
-function ActionOutcomeCard({
-  runId, outcomeRecorded,
-}: { runId: string; outcomeRecorded: boolean }) {
-  const [outcome, setOutcome] = useState<"PARTIAL" | "FAILED" | null>(null);
+function CompletedStep({ number, title, copy }: { number: number; title: string; copy: string }) {
+  return (
+    <li className="task-step task-step--complete task-step--collapsed">
+      <div className="task-step__marker"><CheckmarkFilled size={20} aria-hidden /></div>
+      <div className="task-step__body"><div className="task-step__title"><div><span>Step {number}</span><h2>{title}</h2></div><Tag type="green">Complete</Tag></div><p>{copy}</p></div>
+    </li>
+  );
+}
+
+function OutcomeFeedback({ runId, recorded }: { runId: string; recorded: boolean }) {
+  const [choice, setChoice] = useState<"SUCCESSFUL" | "PARTIAL" | "FAILED" | null>(null);
   const [reason, setReason] = useState("");
-  const [sent, setSent] = useState(false);
+  const [sent, setSent] = useState(recorded);
   const [error, setError] = useState("");
 
-  async function send(value: "SUCCESSFUL" | "PARTIAL" | "FAILED") {
-    if (value !== "SUCCESSFUL" && !reason.trim()) return;
-    setError("");
+  async function send(outcome: "SUCCESSFUL" | "PARTIAL" | "FAILED") {
+    if (outcome !== "SUCCESSFUL" && !reason.trim()) return;
     try {
-      await submitOutcomeFeedback(runId, value, reason);
+      await submitOutcomeFeedback(runId, outcome, reason);
       setSent(true);
     } catch (cause) {
       setError((cause as Error).message);
     }
   }
 
-  if (sent || outcomeRecorded) {
-    return (
-      <section className="feedback-card feedback-card--sent">
-        <Check size={ICON_SM} aria-hidden /> Action outcome recorded for future improvement.
-      </section>
-    );
-  }
-
+  if (sent) return <section className="feedback-success"><CheckmarkFilled size={18} aria-hidden /> Outcome recorded. Thank you.</section>;
   return (
-    <section className="card feedback-card">
-      <div>
-        <h2 className="sec">Did the action work?</h2>
-        <p className="hint">Close the loop so later recommendations can be evaluated against outcomes.</p>
+    <section className="feedback-panel" aria-labelledby="outcome-title">
+      <div><span className="feedback-panel__eyebrow">Optional feedback</span><h2 id="outcome-title">Did the action work?</h2><p>Record the outcome so future recommendations can be evaluated.</p></div>
+      <div className="feedback-panel__choices">
+        <Button kind="secondary" size="sm" onClick={() => void send("SUCCESSFUL")}>Yes, it worked</Button>
+        <Button kind={choice === "PARTIAL" ? "primary" : "secondary"} size="sm" onClick={() => setChoice("PARTIAL")}>Partly</Button>
+        <Button kind={choice === "FAILED" ? "primary" : "secondary"} size="sm" onClick={() => setChoice("FAILED")}>No</Button>
       </div>
-      <div className="feedback-card__choices" role="group" aria-label="Action outcome">
-        <button className="btn btn--secondary btn--sm" onClick={() => void send("SUCCESSFUL")}>Yes, it worked</button>
-        <button className={`btn btn--secondary btn--sm ${outcome === "PARTIAL" ? "btn--selected" : ""}`} onClick={() => setOutcome("PARTIAL")}>Partly</button>
-        <button className={`btn btn--secondary btn--sm ${outcome === "FAILED" ? "btn--selected" : ""}`} onClick={() => setOutcome("FAILED")}>No</button>
-      </div>
-      {outcome && (
-        <div className="feedback-card__detail">
-          <label className="field">
-            <span>What happened?</span>
-            <textarea rows={2} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} />
-          </label>
-          <button className="btn btn--primary btn--sm" disabled={!reason.trim()} onClick={() => void send(outcome)}>Record outcome</button>
-        </div>
-      )}
+      {choice && <div className="feedback-panel__detail"><TextArea id="outcome-reason" labelText="What happened?" value={reason} invalid={!reason.trim()} invalidText="Add a short explanation." onChange={(event) => setReason(event.target.value)} /><Button size="sm" disabled={!reason.trim()} onClick={() => void send(choice)}>Record outcome</Button></div>}
       {error && <p className="field__err" role="alert">{error}</p>}
     </section>
   );
 }
 
-function FeedbackCard({ runId, feedbackRecorded }: { runId: string; feedbackRecorded: boolean }) {
+function RecommendationFeedback({ runId, recorded }: { runId: string; recorded: boolean }) {
   const [rating, setRating] = useState<"HELPFUL" | "NOT_HELPFUL" | null>(null);
   const [reason, setReason] = useState("");
-  const [actionability, setActionability] = useState("");
-  const [sent, setSent] = useState(false);
+  const [sent, setSent] = useState(recorded);
   const [error, setError] = useState("");
 
-  async function send() {
-    if (!rating) return;
-    setError("");
+  async function send(value: "HELPFUL" | "NOT_HELPFUL") {
     try {
-      await submitFeedback(runId, rating, reason, actionability ? { actionability } : {});
+      await submitFeedback(runId, value, reason);
       setSent(true);
     } catch (cause) {
       setError((cause as Error).message);
     }
   }
 
-  if (sent || feedbackRecorded) {
-    return <section className="feedback-card feedback-card--sent"><Check size={ICON_SM} aria-hidden /> Feedback recorded for this recommendation.</section>;
-  }
-
+  if (sent) return <div className="feedback-success"><CheckmarkFilled size={18} aria-hidden /> Recommendation feedback recorded.</div>;
   return (
-    <section className="card feedback-card">
-      <div>
-        <h2 className="sec">Was this recommendation useful?</h2>
-        <p className="hint">Your response is attached to this run for later, reviewed improvement.</p>
-      </div>
-      <div className="feedback-card__choices" role="group" aria-label="Recommendation feedback">
-        <button className={`btn btn--secondary btn--sm ${rating === "HELPFUL" ? "btn--selected" : ""}`} onClick={() => setRating("HELPFUL")}>Yes, helpful</button>
-        <button className={`btn btn--secondary btn--sm ${rating === "NOT_HELPFUL" ? "btn--selected" : ""}`} onClick={() => setRating("NOT_HELPFUL")}>Not quite</button>
-      </div>
-      {rating && (
-        <div className="feedback-card__detail">
-          <label className="field">
-            <span>What should we learn? <small>(optional)</small></span>
-            <textarea rows={2} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} />
-          </label>
-          <label className="field">
-            <span>Quick check <small>(optional)</small></span>
-            <select value={actionability} onChange={(event) => setActionability(event.target.value)}>
-              <option value="">How actionable was it?</option>
-              <option value="IMMEDIATE">I could act immediately</option>
-              <option value="NEEDED_REVIEW">It needed some review</option>
-              <option value="NOT_ACTIONABLE">It was not actionable</option>
-            </select>
-          </label>
-          <button className="btn btn--primary btn--sm" onClick={() => void send()}>Send feedback</button>
-        </div>
-      )}
+    <div className="feedback-panel feedback-panel--nested">
+      <h3>Was this recommendation useful?</h3>
+      <div className="feedback-panel__choices"><Button kind={rating === "HELPFUL" ? "primary" : "secondary"} size="sm" onClick={() => { setRating("HELPFUL"); void send("HELPFUL"); }}>Yes, helpful</Button><Button kind={rating === "NOT_HELPFUL" ? "primary" : "secondary"} size="sm" onClick={() => setRating("NOT_HELPFUL")}>Not quite</Button></div>
+      {rating === "NOT_HELPFUL" && <div className="feedback-panel__detail"><TextArea id="recommendation-reason" labelText="What should improve? (optional)" value={reason} onChange={(event) => setReason(event.target.value)} /><Button size="sm" onClick={() => void send("NOT_HELPFUL")}>Send feedback</Button></div>}
       {error && <p className="field__err" role="alert">{error}</p>}
-    </section>
-  );
-}
-
-function BA({ lab, before, after, good }: { lab: string; before: string; after: string; good?: boolean }) {
-  return (
-    <div className="ba">
-      <div className="ba__lab">{lab}</div>
-      <div className="ba__row">
-        <span className="ba__before">{before}</span>
-        <span className="ba__arrow" aria-hidden>→</span>
-        <span className={`ba__after ${good ? "ba__after--good" : ""}`}>{after}</span>
-      </div>
     </div>
   );
 }

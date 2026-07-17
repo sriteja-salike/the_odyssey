@@ -6,11 +6,81 @@
 
 ---
 
+## 0. Phase 1 core-flow override (2026-07-17)
+
+This section is the normative Phase 1 contract and supersedes any older requirement below that would make the primary workspace resemble an analyst console. Compare, Audit, evidence, and technical trace remain available, but they are secondary Records surfaces rather than co-equal tasks.
+
+### 0.1 Representative persona — Jordan
+
+Jordan is a food-bank operations coordinator who is frequently interrupted during receiving, inventory, and distribution work. Jordan understands pounds, deliveries, cold storage, category coverage, and budget constraints, but does not want to operate an AI console or interpret a forecasting dashboard.
+
+Jordan's immediate questions are always:
+
+1. What is wrong?
+2. What should I do?
+3. Is it safe to approve?
+
+Design implications:
+
+- use plain operational language before technical terms;
+- show one active task, one relevant visual, and one primary action at a time;
+- keep evidence, assumptions, model metadata, and agent stages behind progressive disclosure;
+- preserve the exact simulation notice and repeat the no-external-action consequence at approval and result;
+- make interruptions recoverable: the active step and recorded decision must be obvious on return;
+- target issue recognition within 10 seconds, recommendation understanding within 30 seconds, and safe approval within two minutes.
+
+This persona remains a design assumption until validated with food-bank staff.
+
+### 0.2 Three-step journey
+
+The UI derives the active step from the backend run state; it does not persist a second workflow state.
+
+| Run state | Visible journey |
+|---|---|
+| `DRAFT` | Step 1 `Understand the issue` is active; `Check impact` is the sole primary action. |
+| Request-local `ANALYZING` | Remain in Step 1 with calm progress copy; technical stages are disclosed on demand. |
+| `READY_FOR_REVIEW` | Step 1 is complete, Step 2 `Choose a response` is active, and Step 3 `Confirm` is pending. |
+| Approval dialog | Repeats action, quantity, cost, timing, manager reason when applicable, and the simulation consequence. Final action is `Approve simulated action`. |
+| `APPROVED` | All steps are complete; lead with `Action completed in simulation`, one before/after visual, and `No external action was taken.` |
+| `REJECTED` / `DEFERRED` | Record the decision and unchanged risk without success styling. |
+| `ABSTAINED` | Step 1 is complete, Step 2 is blocked, Step 3 is unavailable, and no approval control renders. |
+
+### 0.3 Progressive disclosure
+
+The active recommendation shows only the action, quantity, simulated cost, timing when relevant, operational effect, and `Review and approve`.
+
+- `Show other options` reveals verified feasible alternatives and selection controls.
+- `Why was this suggested?` reveals concise rationale and uncertainty.
+- `More details` reveals confidence, constraints, rejected options, evidence titles, source IDs, and technical assumptions.
+- Reject and Defer live under `More actions`.
+- Quantity editing appears only when the backend marks the action editable. A custom amount is previewed by `POST /runs/{runId}/action-previews` before approval; offline mode permits only frozen evaluated quantities.
+- Selecting an alternative or edited quantity requires a manager reason and updates the visible recommendation summary.
+
+### 0.4 Shell and navigation
+
+The Phase 1 shell contains `Nourish Ops`, `Today`, `Records`, and an overflow menu. `Records` contains Compare (where available) and Audit for the current run. The overflow menu contains `Switch scenario` and `Start clean run`. Run ID, connection mode, source IDs, versions, and technical context live under `Decision details` or Records. Route URLs remain unchanged.
+
+### 0.5 Scenario explanation contract
+
+Each decision uses no more than one compact verified visual, always paired with a plain-language summary and an expandable exact-value table.
+
+| Scenario | Explanation |
+|---|---|
+| A | Four-week coverage bars, 1.5-week minimum, Aug 10 breach, and simulated recovery from 1.3 to 3.0 weeks. |
+| B | 50,000 lb full acceptance, 40,000 lb refrigerated capacity, and the recommended partial acceptance staying within capacity. |
+| C | 12,000 lb offer versus 6,000 lb target, with the full 12,000 lb redirect as useful disposition. |
+| D | $13,000 available, $9,600 response, $3,400 remaining, $22,350 combined need, and $9,350 shortfall. |
+| E | A source-comparison surface for conflicting records; no chart and no recommendation. |
+
+### 0.6 Result and feedback
+
+After approval, outcome feedback (`Did the action work?`) is the first optional question. Recommendation-quality feedback is behind `Give feedback on this recommendation`. Receipt IDs, adapter names, and target-system information remain under `Decision details`. Existing backend endpoints and recorded states are preserved.
+
 ## 1. Operator contract
 
 ### 1.1 Primary operator
 
-The P0 operator is a regional food-bank supply-planning manager.
+The P0 operator is Jordan, the representative food-bank operations coordinator defined in §0.1.
 
 For the synthetic proof-of-concept, assume the operator:
 

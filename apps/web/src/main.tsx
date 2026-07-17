@@ -2,6 +2,8 @@ import React, { Suspense, lazy } from "react";
 import ReactDOM from "react-dom/client";
 import { createBrowserRouter, RouterProvider, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
+import { InlineLoading, Theme } from "@carbon/react";
+import "@carbon/styles/css/styles.css";
 import "./styles/global.css";
 import "./styles/app.css";
 import { activeRun } from "./lib/liveApi";
@@ -31,10 +33,12 @@ function Bootstrap() {
       .catch((reason: Error) => setError(reason.message));
   }, [navigate]);
   return (
-    <main className="main">
-      <div className="stack" style={{ maxWidth: 620 }}>
-        <h1 className="risk-title">Opening the Scenario A simulation…</h1>
-        {error ? <p className="field__err">{error}</p> : <p className="hint">Connecting to the seeded source systems.</p>}
+    <main className="bootstrap-screen">
+      <div className="bootstrap-screen__mark" aria-hidden>NO</div>
+      <div>
+        <p className="eyebrow">NourishOps decision intelligence</p>
+        <h1>Opening the operations workspace</h1>
+        {error ? <p className="field__err">{error}</p> : <InlineLoading description="Connecting to verified synthetic sources…" />}
       </div>
     </main>
   );
@@ -42,8 +46,10 @@ function Bootstrap() {
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <Suspense fallback={<main className="main"><p className="hint">Loading workspace…</p></main>}>
-      <RouterProvider router={router} future={{ v7_startTransition: true }} />
-    </Suspense>
+    <Theme theme="white" className="root-theme">
+      <Suspense fallback={<main className="bootstrap-screen"><InlineLoading description="Loading workspace…" /></main>}>
+        <RouterProvider router={router} future={{ v7_startTransition: true }} />
+      </Suspense>
+    </Theme>
   </React.StrictMode>
 );

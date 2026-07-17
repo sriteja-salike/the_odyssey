@@ -1,0 +1,290 @@
+import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import {
+  Button,
+  OverflowMenu,
+  OverflowMenuItem,
+  Tag,
+  TextArea,
+} from "@carbon/react";
+import {
+  CheckmarkFilled,
+  ChevronDown,
+  Edit,
+  Locked,
+  OverflowMenuVertical,
+  StarFilled,
+  WarningAlt,
+} from "@carbon/icons-react";
+import { getActionMap, getGolden, type ActionRecord, type ScenarioLetter } from "../lib/api";
+import { buildDecisionPresentation } from "../lib/decisionPresentation";
+import { previewAction, type DecisionBrief, type LiveRun } from "../lib/liveApi";
+import type { Decision, RunState } from "../lib/runState";
+import { dateShort, lb, titleCase, usd } from "../lib/format";
+import DecisionVisual from "./DecisionVisual";
+import Dialog from "./Dialog";
+
+type DialogKind = null | "approve" | "reject" | "defer" | "edit";
+
+interface Props {
+  runId: string;
+  letter: ScenarioLetter;
+  state: RunState;
+  setState: (state: RunState) => void;
+  brief: DecisionBrief;
+  knowledge?: LiveRun["knowledge"];
+  onDecision: (decision: Decision) => Promise<void>;
+}
+
+export default function DecisionReview({ runId, letter, state, setState, brief, knowledge, onDecision }: Props) {
+  const [dialog, setDialog] = useState<DialogKind>(null);
+  const [showOptions, setShowOptions] = useState(false);
+  const presentation = buildDecisionPresentation(letter, brief);
+  const recommended = brief.recommendation;
+  if (!recommended || !presentation.recommendation) return null;
+
+  const allActions = [recommended.action, ...brief.alternatives];
+  const selected = allActions.find((action) => action.action_id === state.selection?.actionId) ?? recommended.action;
+  const nonDefault = selected.action_id !== recommended.action.action_id || Boolean(state.selection?.edited);
+  const reason = state.selection?.reason ?? "";
+  const approvalReady = !nonDefault || reason.trim().length > 0;
+  const selectedCost = state.selection?.previewCostUsd ?? selected.cost_usd;
+  const catalog = getActionMap(brief.scenario_id)[selected.action_id];
+  const goldenRecommendation = getGolden(letter).recommended_action;
+  const arrival = catalog?.arrival_week_start || goldenRecommendation?.arrival_week_start || "";
+  const selectedEffect = selected.action_id === recommended.action.action_id
+    ? presentation.recommendation.effect
+    : "This response will be rechecked against the same verified constraints before approval.";
+
+  function chooseAction(actionId: string) {
+    const action = allActions.find((item) => item.action_id === actionId);
+    if (!action) return;
+    setState({
+      ...state,
+      selection: {
+        actionId,
+        quantityLb: action.requested_quantity_lb,
+        reason: "",
+        edited: false,
+      },
+    });
+  }
+
+  function setReason(value: string) {
+    setState({
+      ...state,
+      selection: {
+        actionId: selected.action_id,
+        quantityLb: state.selection?.quantityLb ?? selected.requested_quantity_lb,
+        reason: value,
+        edited: state.selection?.edited ?? false,
+        previewCostUsd: state.selection?.previewCostUsd,
+      },
+    });
+  }
+
+  async function approve() {
+    await onDecision({
+      kind: nonDefault ? "edit-approve" : "approve",
+      actionId: selected.action_id,
+      quantityLb: state.selection?.quantityLb ?? selected.requested_quantity_lb,
+      reason: nonDefault ? reason.trim() : undefined,
+    });
+  }
+
+  return (
+    <div className="journey-shell">
+      <header className="journey-intro journey-intro--compact">
+        <Tag type="red" size="sm">{presentation.issue.label}</Tag>
+        <h1>{presentation.issue.title}</h1>
+        <p>{presentation.issue.summary}</p>
+      </header>
+
+      <ol className="task-list">
+        <li className="task-step task-step--complete task-step--issue-summary">
+          <div className="task-step__marker"><CheckmarkFilled size={20} aria-hidden /><span className="visually-hidden">Complete</span></div>
+          <div className="task-step__body">
+            <div className="task-step__title"><div><span>Step 1</span><h2>Understand the issue</h2></div><Tag type="green">Complete</Tag></div>
+            <DecisionVisual letter={letter} compact />
+          </div>
+        </li>
+
+        <li className="task-step task-step--active task-step--review">
+          <div className="task-step__marker" aria-hidden>2</div>
+          <div className="task-step__body">
+            <div className="task-step__title"><div><span>Step 2</span><h2>Choose a response</h2></div><Tag type="blue">Current</Tag></div>
+
+            <section className="recommended-choice" aria-labelledby="recommended-title">
+              <div className="recommended-choice__label"><StarFilled size={20} aria-hidden /> Best next step</div>
+              <h3 id="recommended-title">{selected.display_name}</h3>
+              {nonDefault && <Tag type="purple" size="sm">Manager-selected response</Tag>}
+              <dl className="choice-facts">
+                <div><dt>Quantity</dt><dd>{lb(state.selection?.quantityLb ?? selected.requested_quantity_lb)}</dd></div>
+                <div><dt>Simulated cost</dt><dd>{usd(selectedCost)}</dd></div>
+                {arrival && <div><dt>Timing</dt><dd>{dateShort(arrival)}</dd></div>}
+              </dl>
+              <p className="choice-effect"><CheckmarkFilled size={20} aria-hidden /> {selectedEffect}</p>
+              {presentation.recommendation.caution && selected.action_id === recommended.action.action_id && (
+                <p className="choice-caution"><WarningAlt size={18} aria-hidden /> {presentation.recommendation.caution}</p>
+              )}
+
+              {nonDefault && (
+                <TextArea
+                  id="manager-reason"
+                  labelText={state.selection?.edited ? "Reason for changing the quantity" : "Reason for choosing another response"}
+                  helperText="Required before approval · 500 characters maximum"
+                  maxCount={500}
+                  enableCounter
+                  value={reason}
+                  invalid={!reason.trim()}
+                  invalidText="Add a short reason before approval."
+                  onChange={(event) => setReason(event.target.value)}
+                />
+              )}
+
+              <div className="choice-actions">
+                <Button disabled={!approvalReady} onClick={() => setDialog("approve")}>Review and approve</Button>
+                <Button kind="ghost" size="sm" renderIcon={ChevronDown} onClick={() => setShowOptions((value) => !value)} aria-expanded={showOptions}>
+                  {showOptions ? "Hide other options" : "Show other options"}
+                </Button>
+                {brief.approval.editable && selected.action_id === recommended.action.action_id && (
+                  <Button kind="ghost" size="sm" renderIcon={Edit} onClick={() => setDialog("edit")}>Change quantity</Button>
+                )}
+                <OverflowMenu aria-label="More actions" renderIcon={OverflowMenuVertical} size="sm" flipped>
+                  <OverflowMenuItem itemText="Reject recommendation" isDelete onClick={() => setDialog("reject")} />
+                  <OverflowMenuItem itemText="Defer decision" onClick={() => setDialog("defer")} />
+                </OverflowMenu>
+              </div>
+
+              {showOptions && (
+                <div className="other-options" aria-label="Other responses">
+                  {brief.alternatives.map((alternative) => (
+                    <article key={alternative.evaluated_action_id} className={alternative.action_id === selected.action_id ? "is-selected" : undefined}>
+                      <div><strong>{alternative.display_name}</strong><span>{lb(alternative.requested_quantity_lb)} · {usd(alternative.cost_usd)}</span></div>
+                      <Button kind={alternative.action_id === selected.action_id ? "tertiary" : "secondary"} size="sm" onClick={() => chooseAction(alternative.action_id)}>
+                        {alternative.action_id === selected.action_id ? "Selected" : "Choose"}
+                      </Button>
+                    </article>
+                  ))}
+                  {brief.alternatives.length === 0 && <p>No other response passed the current safety checks.</p>}
+                  {nonDefault && <Button kind="ghost" size="sm" onClick={() => setState({ phase: "READY_FOR_REVIEW" })}>Use the recommended response</Button>}
+                </div>
+              )}
+            </section>
+
+            <details className="plain-disclosure">
+              <summary>Why was this suggested?</summary>
+              <div className="disclosure-content">
+                <p>{brief.rationale?.why_now}</p>
+                <p>{brief.rationale?.why_this_action}</p>
+                <small>{brief.rationale?.uncertainty}</small>
+              </div>
+            </details>
+
+            <details className="plain-disclosure">
+              <summary>More details</summary>
+              <div className="disclosure-content technical-details">
+                <dl>
+                  <div><dt>Confidence</dt><dd>{titleCase(recommended.confidence_label)}</dd></div>
+                  <div><dt>Safety checks</dt><dd>Feasible · human approval required · simulation only</dd></div>
+                  <div><dt>Source records</dt><dd>{recommended.action.evidence_ids.join(", ") || "See audit record"}</dd></div>
+                </dl>
+                {brief.rejected_options.length > 0 && (
+                  <div><strong>Responses that did not pass</strong><ul>{brief.rejected_options.map((option) => <li key={option.evaluated_action_id}>{option.display_name}: {option.failed_constraints.map(humanize).join(", ")}</li>)}</ul></div>
+                )}
+                <div><strong>Evidence used</strong><ul>{brief.evidence.map((item) => <li key={item.evidence_id}>{item.title} <span className="mono">{item.evidence_id}</span></li>)}</ul></div>
+                {knowledge && <p>{knowledge.current.length + knowledge.organizational.length} frozen source snapshots were checked for this run.</p>}
+                <Button as={Link} kind="tertiary" size="sm" to={`/runs/${runId}/audit`}>Open full audit record</Button>
+              </div>
+            </details>
+          </div>
+        </li>
+
+        <li className="task-step task-step--pending" aria-disabled="true">
+          <div className="task-step__marker" aria-hidden>3</div>
+          <div className="task-step__body"><div className="task-step__title"><div><span>Step 3</span><h2>Confirm</h2></div><Tag type="cool-gray">Pending</Tag></div><p>You will review the details before anything is recorded.</p></div>
+        </li>
+      </ol>
+
+      <p className="journey-reassurance"><Locked size={16} aria-hidden /> Simulation only — no real order will be placed.</p>
+
+      {dialog === "approve" && (
+        <Dialog title="Apply this action to the simulation?" primaryLabel="Approve simulated action" onClose={() => setDialog(null)} onPrimary={() => { setDialog(null); void approve(); }}>
+          <p>This updates only the current synthetic run. It will not place an order, reserve food, contact a donor, or notify another organization.</p>
+          <dl className="confirmation-facts">
+            <div><dt>Action</dt><dd>{selected.display_name}</dd></div>
+            <div><dt>Quantity</dt><dd>{lb(state.selection?.quantityLb ?? selected.requested_quantity_lb)}</dd></div>
+            <div><dt>Simulated cost</dt><dd>{usd(selectedCost)}</dd></div>
+            {arrival && <div><dt>Timing</dt><dd>{dateShort(arrival)}</dd></div>}
+            {nonDefault && <div><dt>Manager reason</dt><dd>{reason}</dd></div>}
+          </dl>
+        </Dialog>
+      )}
+      {dialog === "reject" && <ReasonDialog mode="reject" onClose={() => setDialog(null)} onConfirm={(value) => { setDialog(null); void onDecision({ kind: "reject", actionId: selected.action_id, quantityLb: selected.requested_quantity_lb, reason: value }); }} />}
+      {dialog === "defer" && <ReasonDialog mode="defer" onClose={() => setDialog(null)} onConfirm={(value) => { setDialog(null); void onDecision({ kind: "defer", actionId: selected.action_id, quantityLb: selected.requested_quantity_lb, reason: value }); }} />}
+      {dialog === "edit" && catalog && (
+        <EditDialog runId={runId} action={catalog} initialQuantity={selected.requested_quantity_lb} onClose={() => setDialog(null)} onApply={(quantity, value, previewCostUsd) => {
+          setDialog(null);
+          setState({ ...state, selection: { actionId: selected.action_id, quantityLb: quantity, reason: value, edited: true, previewCostUsd } });
+        }} />
+      )}
+    </div>
+  );
+}
+
+function ReasonDialog({ mode, onClose, onConfirm }: { mode: "reject" | "defer"; onClose: () => void; onConfirm: (value: string) => void }) {
+  const [value, setValue] = useState("");
+  const reject = mode === "reject";
+  const valid = !reject || value.trim().length > 0;
+  return (
+    <Dialog title={reject ? "Reject this recommendation?" : "Defer this decision?"} primaryLabel={reject ? "Reject recommendation" : "Defer decision"} primaryTone={reject ? "danger" : "action"} primaryDisabled={!valid} onClose={onClose} onPrimary={() => onConfirm(value.trim())}>
+      <p>{reject ? "The recommendation will not be applied and the risk will remain open." : "The risk stays open and the projection remains unchanged."}</p>
+      <TextArea id={`${mode}-reason`} labelText={reject ? "Reason for rejecting" : "Deferral note (optional)"} maxCount={500} enableCounter value={value} invalid={!valid} invalidText="Enter a reason for rejecting this recommendation." onChange={(event) => setValue(event.target.value)} />
+    </Dialog>
+  );
+}
+
+function EditDialog({ runId, action, initialQuantity, onClose, onApply }: { runId: string; action: ActionRecord; initialQuantity: number; onClose: () => void; onApply: (quantity: number, reason: string, previewCostUsd?: string) => void }) {
+  const [quantity, setQuantity] = useState(String(initialQuantity));
+  const [reason, setReason] = useState("");
+  const [checking, setChecking] = useState(false);
+  const [error, setError] = useState("");
+  const parsed = Number(quantity);
+  const rangeValid = Number.isInteger(parsed) && parsed >= action.minimum_quantity_lb && parsed <= action.maximum_quantity_lb && (parsed - action.minimum_quantity_lb) % action.quantity_increment_lb === 0;
+  const valid = rangeValid && reason.trim().length > 0;
+  const range = useMemo(() => `${lb(action.minimum_quantity_lb)}–${lb(action.maximum_quantity_lb)} in ${lb(action.quantity_increment_lb)} steps`, [action]);
+
+  async function recheck() {
+    if (!valid) return;
+    setChecking(true);
+    setError("");
+    try {
+      const preview = await previewAction(runId, action.action_id, parsed);
+      if (!preview.feasible) {
+        const codes = preview.evaluation.failed_codes ?? preview.evaluation.failed_constraints ?? [];
+        setError(codes.includes("OFFLINE_FROZEN_QUANTITY_ONLY")
+          ? "Offline mode can recheck only the frozen evaluated quantities. Reconnect to test a custom amount."
+          : `This amount does not pass the current safety checks: ${codes.map(humanize).join(", ") || "review the amount"}.`);
+        return;
+      }
+      onApply(parsed, reason.trim(), preview.evaluation.cost_usd);
+    } catch (cause) {
+      setError((cause as Error).message);
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  return (
+    <Dialog title="Change quantity" primaryLabel={checking ? "Checking…" : "Recheck plan"} primaryDisabled={!valid || checking} onClose={onClose} onPrimary={() => void recheck()}>
+      <p>Only the quantity can change. Nourish Ops will recheck budget, storage, timing, and authorization before approval.</p>
+      <label className="field"><span>Quantity (lb)</span><input type="number" value={quantity} min={action.minimum_quantity_lb} max={action.maximum_quantity_lb} step={action.quantity_increment_lb} onChange={(event) => setQuantity(event.target.value)} /><small>{range}</small>{!rangeValid && <span className="field__err">Enter an allowed whole-pound quantity.</span>}</label>
+      <TextArea id="edit-reason" labelText="Reason for changing the quantity" maxCount={500} enableCounter value={reason} invalid={!reason.trim()} invalidText="Add a reason before rechecking." onChange={(event) => setReason(event.target.value)} />
+      {error && <p className="field__err" role="alert">{error}</p>}
+    </Dialog>
+  );
+}
+
+function humanize(value: string): string {
+  return value.replaceAll("_", " ").toLowerCase().replace(/^./, (letter) => letter.toUpperCase());
+}

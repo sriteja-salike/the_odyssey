@@ -3,9 +3,9 @@
    are loaded from the append-only PostgreSQL event stream. */
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
+import { Accordion, AccordionItem, InlineLoading, Tag } from "@carbon/react";
 import AppFrame from "../components/AppFrame";
 import NotFoundRun from "./NotFoundRun";
-import { ChevronRight } from "../components/icons";
 import { getGolden, getOverlay } from "../lib/api";
 import { letterFromRunId } from "../lib/run";
 import { CATEGORY_LABEL } from "../lib/categories";
@@ -38,7 +38,6 @@ const EVENT_LABEL: Record<string, string> = {
 export default function Audit() {
   const { runId = "" } = useParams();
   const letter = letterFromRunId(runId);
-  const [open, setOpen] = useState<number | null>(null);
   const [liveEvents, setLiveEvents] = useState<LiveEvent[] | null>(null);
   const [error, setError] = useState("");
 
@@ -60,14 +59,15 @@ export default function Audit() {
 
   return (
     <AppFrame runId={runId} letter={letter} active="audit">
-      <div className="stack" style={{ maxWidth: 940 }}>
-        <section>
-          <h1 className="risk-title" style={{ marginTop: 0 }}>Audit record</h1>
-          <p className="note">Append-only events for this run. Every displayed value traces to a source record.</p>
+      <div className="stack route-stack audit-page">
+        <section className="page-lead">
+          <p className="eyebrow">Run governance · append-only</p>
+          <h1 className="risk-title">Audit record</h1>
+          <p className="lead">Inspect the verified stages, pinned versions, and chronological events behind this decision.</p>
         </section>
 
-        <section className="card">
-          <h2 className="sec">Versions</h2>
+        <section className="card version-card">
+          <div className="section-heading"><div><p className="eyebrow">Reproducibility</p><h2>Frozen versions</h2></div><Tag type="cool-gray" size="sm">Pinned at run creation</Tag></div>
           <div className="versions">
             <span>Schema <b>{v.schema_version}</b></span>
             <span>Data <b>{v.data_version}</b></span>
@@ -78,13 +78,14 @@ export default function Audit() {
         </section>
 
         {trace && (
-          <section className="card">
+          <section className="card trace-card">
             <div className="process-head">
               <div>
+                <p className="eyebrow">Agent transparency</p>
                 <h2 className="sec">How this recommendation was produced</h2>
                 <p className="hint">Verified stage records and timings—not private chain-of-thought.</p>
               </div>
-              <span className="pill pill--ok">{trace.final_status}</span>
+              <Tag type="green" size="sm">{trace.final_status}</Tag>
             </div>
             <ol className="decision-process">
               {trace.stages.map((stage, index) => (
@@ -108,60 +109,38 @@ export default function Audit() {
           </section>
         )}
 
-        <section className="card">
-          <h2 className="sec">Events</h2>
+        <section className="card audit-events-card">
+          <div className="section-heading"><div><p className="eyebrow">Chronology</p><h2>Append-only event stream</h2></div>{events.length > 0 && <Tag type="blue" size="sm">{events.length} events</Tag>}</div>
           {error ? (
             <p className="field__err" role="alert">{error}</p>
           ) : liveEvents === null ? (
-            <p className="hint">Loading the append-only event stream…</p>
+            <InlineLoading description="Loading the append-only event stream…" />
           ) : events.length === 0 ? (
             <p>No events have been recorded for this run.</p>
           ) : (
-            <table className="table">
-              <thead>
-                <tr>
-                  <th scope="col" className="num">#</th>
-                  <th scope="col">Event</th>
-                  <th scope="col">Reference</th>
-                  <th scope="col"><span className="visually-hidden">Details</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                {events.map((e) => {
-                  const isOpen = open === e.sequence;
-                  const detail = eventDetail(e, letter);
-                  return [
-                    <tr key={e.sequence}>
-                      <td className="num">{e.sequence}</td>
-                      <td style={{ fontWeight: 600 }}>{EVENT_LABEL[e.event_type] ?? e.event_type}</td>
-                      <td><span className="srcid">{e.semantic_id}</span></td>
-                      <td>
-                        <button
-                          className="audit-toggle"
-                          aria-expanded={isOpen}
-                          onClick={() => setOpen(isOpen ? null : e.sequence)}
-                        >
-                          <ChevronRight size={14} aria-hidden style={{ transform: isOpen ? "rotate(90deg)" : "none", transition: "transform .15s" }} />
-                          {isOpen ? "Hide" : "Details"}
-                        </button>
-                      </td>
-                    </tr>,
-                    isOpen ? (
-                      <tr key={`${e.sequence}-d`} className="audit-detail">
-                        <td />
-                        <td colSpan={3}>
-                          <dl className="audit-kv">
-                            {detail.map(([k, val]) => (
-                              <div key={k}><dt>{k}</dt><dd>{val}</dd></div>
-                            ))}
-                          </dl>
-                        </td>
-                      </tr>
-                    ) : null,
-                  ];
-                })}
-              </tbody>
-            </table>
+            <Accordion align="start" size="lg" className="audit-events">
+              {events.map((event) => {
+                const detail = eventDetail(event, letter);
+                return (
+                  <AccordionItem
+                    key={event.sequence}
+                    title={(
+                      <span className="audit-event__title">
+                        <span className="audit-event__sequence">{String(event.sequence).padStart(2, "0")}</span>
+                        <strong>{EVENT_LABEL[event.event_type] ?? humanize(event.event_type)}</strong>
+                        <span className="srcid">{event.semantic_id}</span>
+                      </span>
+                    )}
+                  >
+                    <dl className="audit-kv">
+                      {detail.map(([key, value]) => (
+                        <div key={key}><dt>{key}</dt><dd>{value}</dd></div>
+                      ))}
+                    </dl>
+                  </AccordionItem>
+                );
+              })}
+            </Accordion>
           )}
         </section>
       </div>

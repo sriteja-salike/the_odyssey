@@ -3,6 +3,17 @@
    charts (01 §10.2). Rows map to golden keys NO_INTERVENTION / SIMPLE_REORDER /
    AGENT_ACTION. */
 import { useParams } from "react-router-dom";
+import {
+  InlineNotification,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableHeader,
+  TableRow,
+  Tag,
+} from "@carbon/react";
 import AppFrame from "../components/AppFrame";
 import NotFoundRun from "./NotFoundRun";
 import { getGolden, getActionMap } from "../lib/api";
@@ -34,58 +45,79 @@ export default function Compare() {
 
   return (
     <AppFrame runId={runId} letter={letter} active="compare">
-      <div className="stack">
-        <section>
-          <h1 className="risk-title" style={{ marginTop: 0 }}>Compare response policies</h1>
-          <p className="note">Same frozen starting inventory — simulated and labeled as simulated.</p>
+      <div className="stack route-stack compare-page">
+        <section className="page-lead">
+          <p className="eyebrow">Scenario A · policy comparison</p>
+          <h1 className="risk-title">Compare response policies</h1>
+          <p className="lead">Three policies, one frozen starting state. Review the operational trade-offs without changing the approved plan.</p>
         </section>
 
         {managerPlan && (
-          <div className="banner">
-            {managerPlan.edited ? "Manager-edited plan" : "Manager-selected alternative"}: <b>{managerPlan.name}</b> · {lb(managerPlan.qty)}.
-            Its comparison row is computed by the deterministic engine (not yet connected).
-          </div>
+          <InlineNotification
+            lowContrast
+            hideCloseButton
+            kind="info"
+            title={managerPlan.edited ? "Manager-edited plan active" : "Manager-selected alternative active"}
+            subtitle={`${managerPlan.name} · ${lb(managerPlan.qty)}. Its dedicated comparison row is computed by the deterministic engine.`}
+          />
         )}
 
         {!available ? (
           <section className="card">
-            <p>Analyze the disruption to compare response policies.</p>
+            <h2 className="sec">Comparison unavailable</h2>
+            <p>Analyze the disruption first; comparison is unlocked only after the same source snapshot has been evaluated.</p>
           </section>
         ) : (
-          <section className="card" style={{ overflowX: "auto" }}>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th scope="col">Policy</th>
-                  <th scope="col">Selected action</th>
-                  <th scope="col">First breach</th>
-                  <th scope="col" className="num">Essential ≥ min</th>
-                  <th scope="col" className="num">Coverage</th>
-                  <th scope="col" className="num">Cost</th>
-                  <th scope="col" className="num">Stockout wks</th>
-                  <th scope="col">Constraints</th>
-                </tr>
-              </thead>
-              <tbody>
+          <section className="comparison-table">
+            <TableContainer
+              title="Four-week outcomes"
+              description="Conservative projections · synthetic costs · hard constraints enforced"
+            >
+              <Table size="lg">
+                <TableHead>
+                  <TableRow>
+                    <TableHeader>Policy</TableHeader>
+                    <TableHeader>Selected action</TableHeader>
+                    <TableHeader>First breach</TableHeader>
+                    <TableHeader>Essential ≥ min</TableHeader>
+                    <TableHeader>Coverage</TableHeader>
+                    <TableHeader>Cost</TableHeader>
+                    <TableHeader>Stockout wks</TableHeader>
+                    <TableHeader>Constraints</TableHeader>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
                 {ROWS.map(({ key, label }) => {
                   const p = golden.comparison[key] as ComparisonPolicy | undefined;
                   if (!p) return null;
                   const wk4 = p.essential_categories_above_minimum_by_week;
                   return (
-                    <tr key={key}>
-                      <td style={{ fontWeight: 700 }}>{label}</td>
-                      <td>{p.action_id ? (actions[p.action_id]?.display_name ?? p.action_id) : "—"}</td>
-                      <td>{p.first_minimum_breach_week_start ? dateShort(p.first_minimum_breach_week_start) : "None in horizon"}</td>
-                      <td className="num">{wk4[wk4.length - 1]} of 5</td>
-                      <td className="num">{pct(p.horizon_conservative_weighted_coverage)}</td>
-                      <td className="num">{usd(p.cost_usd)}</td>
-                      <td className="num">{int(p.stockout_weeks)}</td>
-                      <td>{p.constraint_evaluation_status === "NOT_APPLICABLE" ? "Not applicable" : p.hard_constraint_violation_codes.length ? p.hard_constraint_violation_codes.join(", ") : "Passed"}</td>
-                    </tr>
+                    <TableRow key={key} className={key === "AGENT_ACTION" ? "comparison-table__recommended" : undefined}>
+                      <TableCell>
+                        <strong>{label}</strong>
+                        {key === "AGENT_ACTION" && <Tag type="blue" size="sm">Recommended</Tag>}
+                      </TableCell>
+                      <TableCell>{p.action_id ? (actions[p.action_id]?.display_name ?? p.action_id) : "—"}</TableCell>
+                      <TableCell>{p.first_minimum_breach_week_start ? dateShort(p.first_minimum_breach_week_start) : "None in horizon"}</TableCell>
+                      <TableCell>{wk4[wk4.length - 1]} of 5</TableCell>
+                      <TableCell>{pct(p.horizon_conservative_weighted_coverage)}</TableCell>
+                      <TableCell>{usd(p.cost_usd)}</TableCell>
+                      <TableCell>{int(p.stockout_weeks)}</TableCell>
+                      <TableCell>
+                        {p.constraint_evaluation_status === "NOT_APPLICABLE" ? (
+                          <Tag type="cool-gray" size="sm">Not applicable</Tag>
+                        ) : p.hard_constraint_violation_codes.length ? (
+                          <Tag type="red" size="sm">{p.hard_constraint_violation_codes.join(", ")}</Tag>
+                        ) : (
+                          <Tag type="green" size="sm">Passed</Tag>
+                        )}
+                      </TableCell>
+                    </TableRow>
                   );
                 })}
-              </tbody>
-            </table>
+                </TableBody>
+              </Table>
+            </TableContainer>
           </section>
         )}
       </div>

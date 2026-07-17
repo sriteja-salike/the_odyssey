@@ -1,49 +1,54 @@
-/* NourishOps — Direction C "Clinical Calm" design tokens.
-   Frozen contract: BUILD_CONTEXT/02_VISUAL_SYSTEM_AND_SCREEN_REFERENCE.md §11.
-   Light-native, airy, humane. One confident indigo accent, single sans family
-   (mono reserved only for machine record IDs). */
 :root {
-  /* surfaces */
-  --bg: #fbfbfc;
+  /* Warm, calm service-design palette grounded in Carbon semantics. */
+  --bg: #fbfaf6;
   --appbar: #ffffff;
   --panel: #ffffff;
-  --raised: #f1f3f6;   /* recommendation panel / hover / quiet fills */
-  --line: #e4e7ec;
-  --line-strong: #cfd4db;
+  --raised: #f7f5ef;
+  --layer: #efede7;
+  --line: #dfddd5;
+  --line-strong: #aaa79e;
 
-  /* text */
-  --ink: #22262b;
-  --sub: #5a626c;
+  --ink: #18211f;
+  --sub: #4f5b57;
+  --quiet: #68726e;
+  --inverse: #ffffff;
 
-  /* semantic */
-  --action: #3d4cb0;
+  --action: #0b57d0;
+  --action-hover: #0847aa;
   --action-ink: #ffffff;
-  --action-tint: #e7e9f6;
-  --breach: #c0413a;
-  --breach-tint: #f7e5e3;
-  --warn: #b07d1e;
-  --warn-tint: #f6eedd;
-  --ok: #2f8f6b;
-  --ok-tint: #e6f2ec;
+  --action-tint: #edf3ff;
+  --breach: #b4422b;
+  --breach-tint: #fff2ed;
+  --warn: #9b6500;
+  --warn-tint: #fff5d9;
+  --ok: #237a45;
+  --ok-tint: #e4f4e8;
 
-  /* chart series (validated colorblind-safe on --bg) */
-  --series-conservative: #3d4cb0;
-  --series-after: #2f8f6b;
-  --series-expected: #5a626c;
+  --series-conservative: #0f62fe;
+  --series-after: #198038;
+  --series-expected: #8a3ffc;
 
-  /* type */
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Roboto Mono", Menlo, Consolas, monospace;
+  --font-sans: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
 
-  /* spacing (4px base) */
-  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s6: 24px; --s8: 32px; --s12: 48px;
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 20px;
+  --s6: 24px;
+  --s8: 32px;
+  --s10: 40px;
+  --s12: 48px;
+  --s16: 64px;
 
-  /* shape */
-  --r-chip: 6px; --r-btn: 10px; --r-panel: 14px; --r-pill: 999px;
+  --r-chip: 999px;
+  --r-btn: 8px;
+  --r-panel: 12px;
+  --r-pill: 999px;
 
-  /* elevation (dialogs/menus/floating only) */
-  --shadow-float: 0 24px 60px -30px rgba(20, 24, 40, 0.35);
-
-  /* control sizing */
-  --control-h: 40px; --control-h-critical: 44px;
+  --shadow-float: 0 18px 50px rgba(24, 33, 31, 0.16);
+  --shadow-soft: 0 8px 24px rgba(24, 33, 31, 0.08);
+  --control-h: 40px;
+  --control-h-critical: 48px;
 }

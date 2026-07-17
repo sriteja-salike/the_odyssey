@@ -1,48 +1,37 @@
-/* Analyze stage trace (01 §4.2): show completed/active stages only. In offline
-   mode stages complete near-instantly — no invented delay to look "agentic".
-   Honors prefers-reduced-motion (completes immediately). */
-import { useEffect, useState } from "react";
-import { Check } from "./icons";
+import { InlineLoading, Tag } from "@carbon/react";
+import { Locked } from "@carbon/icons-react";
 
 const STAGES = [
-  "Reading disruption notice",
-  "Validating supply records",
-  "Projecting four-week coverage",
-  "Checking available responses",
-  "Preparing decision brief",
+  "Reading the new notice",
+  "Checking inventory and delivery records",
+  "Projecting the next four weeks",
+  "Checking safe responses",
 ];
 
-export default function StageTrace({ onDone }: { onDone: () => void }) {
-  const [done, setDone] = useState(0);
-
-  useEffect(() => {
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduce) { setDone(STAGES.length); onDone(); return; }
-    let i = 0;
-    const t = setInterval(() => {
-      i += 1;
-      setDone(i);
-      if (i >= STAGES.length) { clearInterval(t); setTimeout(onDone, 180); }
-    }, 170);
-    return () => clearInterval(t);
-  }, [onDone]);
-
+export default function StageTrace() {
   return (
-    <div className="stack" style={{ maxWidth: 560 }} role="status" aria-live="polite">
-      <h1 className="risk-title" style={{ marginTop: 0 }}>Analyzing disruption…</h1>
-      <ul className="tracelist">
-        {STAGES.map((s, i) => {
-          const state = i < done ? "done" : i === done ? "active" : "todo";
-          return (
-            <li key={s} className={`traceitem traceitem--${state}`}>
-              <span className="traceitem__mark" aria-hidden>
-                {state === "done" ? <Check size={14} /> : <span className="spinner" />}
-              </span>
-              {s}
-            </li>
-          );
-        })}
-      </ul>
+    <div className="journey-shell">
+      <header className="journey-intro">
+        <Tag type="blue" size="sm">Impact check in progress</Tag>
+        <h1>Checking what this means for your operation</h1>
+        <p>Nourish Ops is checking inventory, deliveries, and available responses before it shows a recommendation.</p>
+      </header>
+      <ol className="task-list">
+        <li className="task-step task-step--active">
+          <div className="task-step__marker" aria-hidden>1</div>
+          <div className="task-step__body">
+            <div className="task-step__title"><div><span>Step 1</span><h2>Understand the issue</h2></div><Tag type="blue">Checking</Tag></div>
+            <InlineLoading description="Checking inventory, deliveries, and available responses…" />
+            <details className="plain-disclosure analysis-details">
+              <summary>What is being checked?</summary>
+              <ul>{STAGES.map((stage) => <li key={stage}>{stage}</li>)}</ul>
+            </details>
+          </div>
+        </li>
+        <li className="task-step task-step--pending" aria-disabled="true"><div className="task-step__marker">2</div><div className="task-step__body"><h2>Choose a response</h2><p>Waiting for the impact check.</p></div></li>
+        <li className="task-step task-step--pending" aria-disabled="true"><div className="task-step__marker">3</div><div className="task-step__body"><h2>Confirm</h2><p>You will review the details before anything is recorded.</p></div></li>
+      </ol>
+      <p className="journey-reassurance"><Locked size={16} aria-hidden /> Nothing happens until you confirm.</p>
     </div>
   );
 }

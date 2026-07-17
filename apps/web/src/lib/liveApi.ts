@@ -1,7 +1,8 @@
 /* Durable run API with an explicit browser-only demo fallback. Domain errors
    from a reachable API are always surfaced; only connection failures/timeouts
    enter offline mode. */
-import type { ScenarioLetter } from "./api";
+import { getGolden, type ScenarioLetter } from "./api";
+import { letterFromRunId } from "./run";
 import type { Decision } from "./runState";
 import type { DecisionKind } from "./runState";
 import type { LiveEvent, LiveRun } from "./liveTypes";
@@ -182,6 +183,71 @@ export async function evaluateRun(runId: string): Promise<LiveRun> {
     if (!(error instanceof OfflineError)) throw error;
     markOffline();
     return oEvaluateRun(runId);
+  }
+}
+
+export interface ActionPreview {
+  run_id: string;
+  action_id: string;
+  requested_quantity_lb: number;
+  decision_status: string;
+  feasible: boolean;
+  evaluation: {
+    evaluated_action_id?: string;
+    cost_usd?: string;
+    failed_codes?: string[];
+    failed_constraints?: string[];
+    [key: string]: unknown;
+  };
+  would_be_recommended: boolean;
+  recommended_action: Record<string, unknown> | null;
+  simulated: true;
+}
+
+function offlinePreview(runId: string, actionId: string, quantityLb: number): ActionPreview {
+  const letter = letterFromRunId(runId) ?? "A";
+  const golden = getGolden(letter);
+  const evaluation = golden.action_evaluations.find((item) =>
+    item.action_id === actionId && item.requested_quantity_lb === quantityLb
+  );
+  const feasible = Boolean(evaluation?.feasible);
+  return {
+    run_id: runId,
+    action_id: actionId,
+    requested_quantity_lb: quantityLb,
+    decision_status: feasible ? "READY_FOR_REVIEW" : "ABSTAINED",
+    feasible,
+    evaluation: evaluation ? {
+      evaluated_action_id: evaluation.evaluated_action_id,
+      cost_usd: evaluation.cost_usd,
+      failed_codes: evaluation.failed_constraint_codes,
+    } : { failed_codes: ["OFFLINE_FROZEN_QUANTITY_ONLY"] },
+    would_be_recommended: evaluation?.evaluated_action_id === golden.recommended_action?.evaluated_action_id,
+    recommended_action: golden.recommended_action as unknown as Record<string, unknown> | null,
+    simulated: true,
+  };
+}
+
+export async function previewAction(runId: string, actionId: string, quantityLb: number): Promise<ActionPreview> {
+  if (OFFLINE) return offlinePreview(runId, actionId, quantityLb);
+  try {
+    const current = await getRun(runId);
+    if (OFFLINE) return offlinePreview(runId, actionId, quantityLb);
+    const recommendationId = current.decision_brief?.recommendation?.recommendation_id;
+    if (!recommendationId) throw new Error("Refresh the recommendation before changing the plan.");
+    return await request<ActionPreview>(`/runs/${runId}/action-previews`, {
+      method: "POST",
+      body: JSON.stringify({
+        recommendation_id: recommendationId,
+        expected_revision: current.revision,
+        action_id: actionId,
+        quantity_lb: quantityLb,
+      }),
+    });
+  } catch (error) {
+    if (!(error instanceof OfflineError)) throw error;
+    markOffline();
+    return offlinePreview(runId, actionId, quantityLb);
   }
 }
 

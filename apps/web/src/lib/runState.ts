@@ -10,6 +10,9 @@ export type Phase =
   | "DRAFT"
   | "ANALYZING"
   | "READY_FOR_REVIEW"
+  | "NO_ACTION_REQUIRED"
+  | "STALE"
+  | "FAILED"
   | "ABSTAINED"
   | "APPROVED"
   | "REJECTED"
@@ -31,6 +34,7 @@ export interface Selection {
   quantityLb: number;
   reason: string;
   edited: boolean; // true when quantity was changed via Edit quantity
+  previewCostUsd?: string;
 }
 
 export interface RunState {
