@@ -1,7 +1,7 @@
 /* Durable run API with an explicit browser-only demo fallback. Domain errors
    from a reachable API are always surfaced; only connection failures/timeouts
    enter offline mode. */
-import { getGolden, getScenarioEvidence, type ScenarioLetter } from "./api";
+import { getGolden, getScenarioEvidence, getScenarioPlannedInbounds, type ScenarioLetter } from "./api";
 import { letterFromRunId } from "./run";
 import { buildDecisionPresentation } from "./decisionPresentation";
 import type { Decision } from "./runState";
@@ -218,6 +218,12 @@ export async function getWorkItems(): Promise<WorkItem[]> {
 
 export async function startWorkItem(item: WorkItem): Promise<LiveRun> {
   return createCaseRun(item.case_key);
+}
+
+/** Direct developer/demo access to a prepared situation. Employee flows use startWorkItem. */
+export async function startCase(caseKey: string): Promise<LiveRun> {
+  const draft = await createCaseRun(caseKey);
+  return evaluateRun(draft.run_id);
 }
 
 export async function askOperationsAssistant(
@@ -441,6 +447,7 @@ function offlineWorkItems(): WorkItem[] {
       due_label: due ? `Review by ${due}` : null,
       source_count: getScenarioEvidence(letter).length,
       connected_sources: DEMO_CONNECTIONS,
+      expected_inbounds: offlineExpectedInbounds(letter),
       presentation,
       primary_action_label: state === "NEEDS_REVIEW" ? "Ask agent to review" : state === "INFORMATION_NEEDED" ? "Review blocking records" : "View details",
       synthetic: true,
@@ -458,12 +465,53 @@ const DEMO_CONNECTIONS: NonNullable<WorkItem["connected_sources"]> = [
   { source_id: "knowledge-inbox", display_name: "Operations knowledge inbox", source_kind: "ORGANIZATIONAL_KNOWLEDGE" },
 ];
 
+const INBOUND_CATEGORIES: Record<ScenarioLetter, string[]> = {
+  A: ["PROTEIN"],
+  B: ["PRODUCE"],
+  C: ["DAIRY", "SNACKS_DISCRETIONARY"],
+  D: ["DAIRY", "PROTEIN"],
+  E: ["PROTEIN"],
+};
+
+function offlineExpectedInbounds(letter: ScenarioLetter): NonNullable<WorkItem["expected_inbounds"]> {
+  return getScenarioPlannedInbounds(letter)
+    .filter((item) => INBOUND_CATEGORIES[letter].includes(item.category_id))
+    .sort((a, b) => (a.expected_week_start ?? "9999-12-31").localeCompare(b.expected_week_start ?? "9999-12-31") || a.inbound_id.localeCompare(b.inbound_id))
+    .map((item) => ({
+      inbound_id: item.inbound_id,
+      category_label: humanize(item.category_id),
+      quantity_label: item.gross_quantity_lb === null ? "Quantity unavailable" : `${item.gross_quantity_lb.toLocaleString()} lb`,
+      expected_date_label: item.expected_week_start ? formatInboundDate(item.expected_week_start) : "Date unavailable",
+      status_label: item.status ? humanize(item.status) : "Status unavailable",
+      source_label: item.source_type ? humanize(item.source_type) : "Source unavailable",
+    }));
+}
+
+function formatInboundDate(value: string) {
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" })
+    .format(new Date(`${value.slice(0, 10)}T12:00:00Z`));
+}
+
+function humanize(value: string) {
+  if (value.toUpperCase() === "USDA") return "USDA";
+  return value.toLowerCase().replaceAll("_", " ").replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
 function offlineAssistantAnswer(
   messages: OperationsAssistantMessage[],
   currentWorkItemId?: string,
 ): OperationsAssistantResponse {
   const items = offlineWorkItems();
   const value = [...messages].reverse().find((item) => item.role === "user")?.content.toLowerCase() ?? "";
+  if (value.match(/connected to|connections|connected systems|integrations/)) {
+    return offlineGlobalAnswer(
+      `ShareStack has read-only demo connections to ${naturalList(DEMO_CONNECTIONS.map((item) => item.display_name))}. These connections provide inventory, incoming delivery, distribution, donation, policy, and response information.`,
+    );
+  }
+  if (value.match(/inventory concerns|all situations|open issues|everything needs/)) {
+    const ordered = [...items].sort((a, b) => ({ NOW: 0, SOON: 1, ROUTINE: 2 }[a.urgency] - { NOW: 0, SOON: 1, ROUTINE: 2 }[b.urgency]));
+    return offlineGlobalAnswer(`There are ${ordered.length} verified situations in today’s queue:\n${ordered.map((item, index) => `${index + 1}. ${item.presentation.issue.title}`).join("\n")}`);
+  }
   const archetype = value.match(/produce|cold|storage|refriger/) ? "PERISHABLE_CAPACITY"
     : value.match(/donation|snack/) ? "DONATION_DISPOSITION"
       : value.match(/budget|cost/) ? "RESOURCE_TRADEOFF"
@@ -490,6 +538,8 @@ function offlineAssistantAnswer(
   const conflicts = workItem.presentation.visual.conflicts;
   const answer = value.includes("which record") && conflicts.length
     ? `These decision-critical records conflict: ${conflicts.map((item) => `${item.field_label}: ${item.observed_values.join(" versus ")} in ${item.sources.join(", ")}`).join("; ")}.`
+    : value.match(/expected shipment|expected inbound|inbound schedule|arriving/)
+    ? expectedInboundAnswer(workItem)
     : value.includes("information") || value.includes("checked") || value.includes("source")
     ? `I checked ${workItem.source_count} case records using the connected inventory, delivery, policy, capacity, and response information. Open “Information checked” to see where it came from.`
     : recommendation
@@ -508,6 +558,32 @@ function offlineAssistantAnswer(
     guardrails: offlineAssistantGuardrails(),
     synthetic: true,
   };
+}
+
+function expectedInboundAnswer(workItem: WorkItem) {
+  const inbounds = workItem.expected_inbounds ?? [];
+  if (!inbounds.length) return "No expected inbound records are available for this situation.";
+  return `Expected inbound shipments for this situation:\n${inbounds.map((item) => `• ${item.expected_date_label} — ${item.quantity_label} of ${item.category_label} from ${item.source_label} · ${item.status_label}`).join("\n")}`;
+}
+
+function offlineGlobalAnswer(answer: string): OperationsAssistantResponse {
+  return {
+    schema_version: "operations-assistant-response/2.0.0",
+    response_type: "ANSWER",
+    answer,
+    work_item: null,
+    suggested_questions: ["What needs my attention first?", "Are any deliveries at risk?", "Do any records conflict?"],
+    authority_note: "This answer uses the frozen demo connections. Ask about a situation to open a decision.",
+    agent: offlineOperationsMetadata(),
+    guardrails: offlineAssistantGuardrails(),
+    synthetic: true,
+  };
+}
+
+function naturalList(values: string[]) {
+  if (values.length < 2) return values[0] ?? "";
+  if (values.length === 2) return values.join(" and ");
+  return `${values.slice(0, -1).join(", ")}, and ${values.at(-1)}`;
 }
 
 function offlineOperationsMetadata(): OperationsAssistantResponse["agent"] {

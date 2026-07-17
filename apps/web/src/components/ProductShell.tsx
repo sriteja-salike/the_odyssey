@@ -1,5 +1,6 @@
 import { NavLink } from "react-router-dom";
 import { WarningAlt, Wheat } from "@carbon/icons-react";
+import ScenarioMenu from "./ScenarioMenu";
 
 const SIM_NOTICE = "Simulation only — All organizations, records, quantities, costs, and outcomes in this prototype are synthetic.";
 
@@ -23,6 +24,7 @@ export default function ProductShell({
           <NavLink to="/assistant" aria-current={active === "assistant" ? "page" : undefined}>Ask</NavLink>
           <NavLink to="/records" aria-current={active === "records" ? "page" : undefined}>Records</NavLink>
           {lastRun && <NavLink to={`/runs/${lastRun}`}>Decision</NavLink>}
+          <ScenarioMenu />
         </nav>
         <div className="simulation-note simulation-note--home" role="note">
           <WarningAlt size={17} aria-hidden />

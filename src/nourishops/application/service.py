@@ -34,6 +34,14 @@ from nourishops.application.presentation import WorkItem, build_work_item
 from nourishops.persistence.postgres import PostgresStore, jsonable, sha256
 
 
+def _natural_list(values: list[str]) -> str:
+    if len(values) < 2:
+        return values[0] if values else ""
+    if len(values) == 2:
+        return " and ".join(values)
+    return ", ".join(values[:-1]) + f", and {values[-1]}"
+
+
 class ApplicationError(Exception):
     def __init__(self, code: str, message: str, status_code: int = 400):
         super().__init__(message)
@@ -133,7 +141,7 @@ class NourishOpsService:
             (item for item in items if item["work_item_id"] == selection.work_item_id),
             None,
         )
-        answer = self._render_operations_answer(selection.answer_style, selected)
+        answer = self._render_operations_answer(selection.answer_style, selected, items)
         return {
             "schema_version": "operations-assistant-response/2.0.0",
             "response_type": selection.response_type,
@@ -161,8 +169,36 @@ class NourishOpsService:
 
     @staticmethod
     def _render_operations_answer(
-        style: str, selected: dict[str, Any] | None,
+        style: str,
+        selected: dict[str, Any] | None,
+        items: list[dict[str, Any]] | None = None,
     ) -> str:
+        if style == "CONNECTIONS":
+            sources = {
+                source["source_id"]: source["display_name"]
+                for item in items or []
+                for source in item.get("connected_sources") or []
+            }
+            names = list(sources.values())
+            if not names:
+                return "No operational connections are available right now."
+            return (
+                "ShareStack has read-only demo connections to "
+                f"{_natural_list(names)}. These connections provide inventory, "
+                "incoming delivery, distribution, donation, policy, and response information."
+            )
+        if style == "OVERVIEW":
+            ordered = sorted(
+                items or [],
+                key=lambda item: ({"NOW": 0, "SOON": 1, "ROUTINE": 2}[item["urgency"]], item["work_item_id"]),
+            )
+            if not ordered:
+                return "There are no verified situations in today’s queue."
+            lines = [
+                f"{index}. {item['presentation']['issue']['title']}"
+                for index, item in enumerate(ordered, start=1)
+            ]
+            return f"There are {len(lines)} verified situations in today’s queue:\n" + "\n".join(lines)
         if selected is None:
             return (
                 "I can help with shipment delays, short-life offers, donation "
@@ -180,6 +216,16 @@ class NourishOpsService:
                 "inventory, delivery, policy, capacity, and response information. Open "
                 "‘Information checked’ to see where it came from."
             )
+        if style == "SHIPMENTS":
+            inbounds = selected.get("expected_inbounds") or []
+            if not inbounds:
+                return "No expected inbound records are available for this situation."
+            lines = [
+                f"• {item['expected_date_label']} — {item['quantity_label']} of "
+                f"{item['category_label']} from {item['source_label']} · {item['status_label']}"
+                for item in inbounds
+            ]
+            return "Expected inbound shipments for this situation:\n" + "\n".join(lines)
         if style in {"CONFLICTS", "CORRECTION"}:
             conflicts = presentation["visual"].get("conflicts") or []
             if not conflicts:
@@ -209,7 +255,6 @@ class NourishOpsService:
             f"{issue['title']} {issue['summary']} The agent stopped safely and did "
             "not create an approval."
         )
-
     def get_context_bundle(self, run_id: str) -> dict[str, Any]:
         run = self.get_run(run_id)
         context_hash = sha256({

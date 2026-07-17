@@ -10,6 +10,7 @@ const EXAMPLE_PROMPTS = [
   "What needs my attention first?",
   "Are any deliveries at risk?",
   "Show inventory concerns",
+  "What are the expected shipments?",
 ];
 
 export default function Home() {

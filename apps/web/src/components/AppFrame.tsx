@@ -9,15 +9,14 @@ import {
   HeaderNavigation,
   OverflowMenu,
   OverflowMenuItem,
-  Select,
-  SelectItem,
   Tag,
 } from "@carbon/react";
 import { Information, OverflowMenuVertical, WarningAlt } from "@carbon/icons-react";
-import { SCENARIOS, getOverlay, type ScenarioLetter } from "../lib/api";
+import { getOverlay, type ScenarioLetter } from "../lib/api";
 import { createRun, getConnectionMode, subscribeConnectivity } from "../lib/liveApi";
 import { date } from "../lib/format";
 import Dialog from "./Dialog";
+import ScenarioMenu from "./ScenarioMenu";
 
 const SIM_NOTICE =
   "Simulation only — All organizations, records, quantities, costs, and outcomes in this prototype are synthetic.";
@@ -34,8 +33,6 @@ export default function AppFrame({ runId, letter, active, onStartClean, children
   const navigate = useNavigate();
   const overlay = getOverlay(letter);
   const [resetOpen, setResetOpen] = useState(false);
-  const [scenarioOpen, setScenarioOpen] = useState(false);
-  const [pendingScenario, setPendingScenario] = useState<ScenarioLetter>(letter);
   const [working, setWorking] = useState(false);
   const connectionMode = useSyncExternalStore(subscribeConnectivity, getConnectionMode, getConnectionMode);
   const offline = connectionMode === "OFFLINE_DEMO";
@@ -53,17 +50,6 @@ export default function AppFrame({ runId, letter, active, onStartClean, children
         navigate(`/runs/${run.run_id}`);
       }
       setResetOpen(false);
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function switchScenario() {
-    setWorking(true);
-    try {
-      const run = await createRun(pendingScenario, runId);
-      setScenarioOpen(false);
-      navigate(`/runs/${run.run_id}`);
     } finally {
       setWorking(false);
     }
@@ -88,16 +74,13 @@ export default function AppFrame({ runId, letter, active, onStartClean, children
           </HeaderMenu>
         </HeaderNavigation>
         <HeaderGlobalBar>
+          <ScenarioMenu className="scenario-menu--header" />
           <OverflowMenu
             aria-label="Decision options"
             renderIcon={OverflowMenuVertical}
             flipped
             className="header-overflow"
           >
-            <OverflowMenuItem itemText="Switch demo situation" onClick={() => {
-              setPendingScenario(letter);
-              setScenarioOpen(true);
-            }} />
             <OverflowMenuItem itemText="Start clean run" onClick={() => setResetOpen(true)} />
           </OverflowMenu>
         </HeaderGlobalBar>
@@ -136,26 +119,6 @@ export default function AppFrame({ runId, letter, active, onStartClean, children
           onClose={() => setResetOpen(false)}
         >
           <p>Start again from the original synthetic fixture. This run and its complete audit record will remain unchanged.</p>
-        </Dialog>
-      )}
-
-      {scenarioOpen && (
-        <Dialog
-          title="Switch demo situation?"
-          primaryLabel={working ? "Opening…" : "Open situation"}
-          primaryDisabled={working || pendingScenario === letter}
-          onPrimary={() => void switchScenario()}
-          onClose={() => setScenarioOpen(false)}
-        >
-          <p>Choose a prepared situation for the demo. In everyday use, employees start from Home and ShareStack matches the situation automatically.</p>
-          <Select
-            id="scenario-switcher"
-            labelText="Scenario"
-            value={pendingScenario}
-            onChange={(event) => setPendingScenario(event.target.value as ScenarioLetter)}
-          >
-            {SCENARIOS.map((scenario) => <SelectItem key={scenario.letter} value={scenario.letter} text={scenario.label} />)}
-          </Select>
         </Dialog>
       )}
     </div>

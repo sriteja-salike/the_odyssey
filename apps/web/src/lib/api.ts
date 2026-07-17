@@ -19,6 +19,7 @@ import candidateActions from "../data/fixtures/candidate_actions.json";
 import evidenceRecords from "../data/fixtures/evidence_records.json";
 import historicalFlow from "../data/fixtures/historical_weekly_category_flow.json";
 import categoryPolicies from "../data/fixtures/category_policies.json";
+import plannedInbound from "../data/fixtures/planned_inbound.json";
 import type { CategoryId } from "../types/golden";
 
 export type ScenarioLetter = "A" | "B" | "C" | "D" | "E";
@@ -56,6 +57,15 @@ export interface ScenarioOverlay {
   };
 }
 
+export interface PlannedInboundRecord {
+  inbound_id: string;
+  expected_week_start: string | null;
+  category_id: string;
+  gross_quantity_lb: number | null;
+  source_type: string | null;
+  status: string | null;
+}
+
 const GOLDENS: Record<ScenarioLetter, GoldenOutput> = {
   A: goldenA as unknown as GoldenOutput,
   B: goldenB as unknown as GoldenOutput,
@@ -88,6 +98,16 @@ export function getGolden(letter: ScenarioLetter): GoldenOutput {
 
 export function getOverlay(letter: ScenarioLetter): ScenarioOverlay {
   return OVERLAYS[letter];
+}
+
+/** Effective, verified inbound records after applying the selected scenario overlay. */
+export function getScenarioPlannedInbounds(letter: ScenarioLetter): PlannedInboundRecord[] {
+  const overlay = getOverlay(letter).overlay;
+  const removed = new Set(overlay.remove_inbound_ids);
+  const mutations = new Map(overlay.inbound_mutations.map((item) => [item.inbound_id, item.set]));
+  return (plannedInbound as { records: PlannedInboundRecord[] }).records
+    .filter((item) => !removed.has(item.inbound_id))
+    .map((item) => ({ ...item, ...(mutations.get(item.inbound_id) ?? {}) } as PlannedInboundRecord));
 }
 
 /** Action catalog records for a scenario, keyed by action_id. */

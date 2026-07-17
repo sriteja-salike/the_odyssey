@@ -121,6 +121,14 @@ export interface WorkItem {
     display_name: string;
     source_kind: string;
   }[];
+  expected_inbounds?: {
+    inbound_id: string;
+    category_label: string;
+    quantity_label: string;
+    expected_date_label: string;
+    status_label: string;
+    source_label: string;
+  }[];
   presentation: DecisionPresentation;
   primary_action_label: string;
   synthetic: true;

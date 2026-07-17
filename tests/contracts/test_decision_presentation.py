@@ -6,6 +6,7 @@ from nourishops.application.presentation import (
     build_decision_presentation,
     build_work_item,
 )
+from nourishops.application.service import NourishOpsService
 from nourishops.domain.engine import analyze
 from nourishops.persistence.postgres import jsonable
 from tests.support import FIXTURES
@@ -84,3 +85,37 @@ def test_work_item_uses_general_case_identity_and_verified_sources() -> None:
     assert item.case_key == "scenario_b"
     assert item.source_count > 0
     assert item.due_label == "Review by Aug 3"
+
+
+def test_work_item_and_guided_shipment_answer_use_verified_inbounds() -> None:
+    item = build_work_item("scenario_a", _analysis("A"), _context("A"))
+    by_id = {inbound.inbound_id: inbound for inbound in item.expected_inbounds}
+
+    delayed = by_id["INB-USDA-PROTEIN-104"]
+    assert delayed.quantity_label == "10,000 lb"
+    assert delayed.expected_date_label == "Aug 17"
+    assert delayed.status_label == "Probable"
+
+    answer = NourishOpsService._render_operations_answer(
+        "SHIPMENTS", item.model_dump(mode="json"), [item.model_dump(mode="json")],
+    )
+    assert "10,000 lb of Protein from USDA · Probable" in answer
+    assert "PO-4471" not in answer
+
+
+def test_connection_answer_lists_verified_source_registry() -> None:
+    item = build_work_item(
+        "scenario_a",
+        _analysis("A"),
+        _context("A"),
+        [{
+            "source_id": "warehouse-wms",
+            "display_name": "Warehouse management system",
+            "source_kind": "CURRENT_KNOWLEDGE",
+        }],
+    )
+    answer = NourishOpsService._render_operations_answer(
+        "CONNECTIONS", None, [item.model_dump(mode="json")],
+    )
+    assert "Warehouse management system" in answer
+    assert "read-only demo connections" in answer

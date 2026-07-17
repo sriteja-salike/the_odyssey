@@ -71,6 +71,18 @@ beforeEach(() => {
 });
 
 describe("operations agent conversation", () => {
+  it("uses the scripted demo answer without calling the agent API", async () => {
+    render(
+      <MemoryRouter initialEntries={["/assistant?prompt=What%20are%20the%20expected%20shipments%3F"]}>
+        <Routes><Route path="/assistant" element={<OperationsAssistant />} /></Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText(/USDA Protein \(PO-4471\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Prairie Farms/)).toBeInTheDocument();
+    expect(mocks.askOperationsAssistant).not.toHaveBeenCalled();
+  });
+
   it("sends full history on follow-up and exposes agent provenance", async () => {
     mocks.askOperationsAssistant
       .mockResolvedValueOnce(response("I found a decision-critical record conflict."))

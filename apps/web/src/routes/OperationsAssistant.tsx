@@ -18,6 +18,7 @@ import {
   startWorkItem,
   type OperationsAssistantResponse,
 } from "../lib/liveApi";
+import { getCannedAnswer } from "../lib/cannedAnswers";
 import type { OperationsAssistantMessage } from "../lib/liveTypes";
 
 const WELCOME = "Tell me what changed or ask what needs attention. I’ll match your question to verified operations data, explain the decision, and keep approval with you.";
@@ -129,6 +130,20 @@ function AssistantThread({
           content: messageText(message),
         }))
         .filter((message) => message.content.length > 0);
+      const lastUser = [...conversation].reverse().find((message) => message.role === "user");
+      const canned = lastUser ? getCannedAnswer(lastUser.content) : null;
+      if (canned) {
+        contextItemId.current = undefined;
+        setResponse(canned);
+        writeSession({
+          messages: [
+            ...conversation.map((message) => textMessage(message.role, message.content)),
+            textMessage("assistant", canned.answer),
+          ],
+          response: canned,
+        });
+        return { content: [{ type: "text", text: canned.answer }] };
+      }
       try {
         const next = await askOperationsAssistant(conversation, contextItemId.current);
         if (abortSignal.aborted) throw new DOMException("Aborted", "AbortError");
@@ -320,6 +335,8 @@ function writeSession(session: PersistedSession) {
 }
 
 function seedRequest(prompt: string): Promise<OperationsAssistantResponse> {
+  const canned = getCannedAnswer(prompt);
+  if (canned) return Promise.resolve(canned);
   const existing = seedRequests.get(prompt);
   if (existing) return existing;
   const request = askOperationsAssistant([{ role: "user", content: prompt }]);

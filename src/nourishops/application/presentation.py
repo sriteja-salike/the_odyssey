@@ -101,6 +101,19 @@ class ConnectedSource(BaseModel):
     ]
 
 
+class ExpectedInbound(BaseModel):
+    """A verified inbound record rendered in operations-friendly language."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    inbound_id: str
+    category_label: str
+    quantity_label: str
+    expected_date_label: str
+    status_label: str
+    source_label: str
+
+
 class WorkItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -112,6 +125,7 @@ class WorkItem(BaseModel):
     due_label: str | None
     source_count: int
     connected_sources: list[ConnectedSource] = Field(default_factory=list)
+    expected_inbounds: list[ExpectedInbound] = Field(default_factory=list)
     presentation: DecisionPresentation
     primary_action_label: str
     synthetic: Literal[True]
@@ -149,6 +163,8 @@ def _date(value: str | None) -> str | None:
 def _humanize(value: str | None) -> str:
     if not value:
         return "Inventory"
+    if value.upper() == "USDA":
+        return "USDA"
     return value.replace("_", " ").lower().title()
 
 
@@ -491,6 +507,20 @@ def build_work_item(
     if due is None:
         due = next((_date(item.get("response_deadline")) for item in incidents if item.get("response_deadline")), None)
     source_count = len(context.get("organizational_knowledge", {}).get("active_evidence") or [])
+    expected_inbounds = [
+        ExpectedInbound(
+            inbound_id=str(record["inbound_id"]),
+            category_label=_humanize(record.get("category_id")),
+            quantity_label=_lb(record.get("gross_quantity_lb")),
+            expected_date_label=_date(record.get("expected_week_start")) or "Date unavailable",
+            status_label=_humanize(record.get("status")) if record.get("status") else "Status unavailable",
+            source_label=_humanize(record.get("source_type")),
+        )
+        for record in sorted(
+            context.get("current_knowledge", {}).get("planned_inbounds") or [],
+            key=lambda item: (item.get("expected_week_start") or "9999-12-31", item.get("inbound_id") or ""),
+        )
+    ]
     return WorkItem(
         schema_version="work-item/1.0.0",
         work_item_id=context["scenario"]["scenario_id"],
@@ -499,7 +529,10 @@ def build_work_item(
         urgency="NOW" if state == "INFORMATION_NEEDED" or primary.get("priority_score") == "100" else "SOON",
         due_label=f"Review by {due}" if due else None,
         source_count=source_count,
-        connected_sources=connected_sources or [],
+        connected_sources=[
+            ConnectedSource.model_validate(source) for source in connected_sources or []
+        ],
+        expected_inbounds=expected_inbounds,
         presentation=presentation,
         primary_action_label=(
             "Ask agent to review" if state == "NEEDS_REVIEW"

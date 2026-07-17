@@ -860,6 +860,49 @@ h2.sec, h3.sec { margin-bottom: var(--s4); }
 .product-header > .cds--overflow-menu { justify-self: end; border-radius: 8px; }
 .product-header > .cds--overflow-menu:hover { background: var(--raised); }
 
+/* Prepared-situation picker: secondary demo access, not the employee workflow. */
+.scenario-menu { position: relative; display: inline-flex; align-items: center; }
+.scenario-menu__trigger {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  color: var(--sub);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--r-btn);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.scenario-menu__trigger:hover { color: var(--ink); background: var(--panel); border-color: var(--line-strong); }
+.scenario-menu__trigger:focus-visible { outline: 2px solid var(--action); outline-offset: 2px; }
+.scenario-menu__chevron { transition: transform .15s ease; }
+.scenario-menu__chevron--open { transform: rotate(180deg); }
+.scenario-menu__panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
+  min-width: 280px;
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-panel);
+  box-shadow: var(--shadow-float);
+}
+.scenario-menu__hint { padding: 6px 10px 8px; color: var(--quiet); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+.scenario-menu__item { min-height: 44px; padding: 9px 10px; color: var(--ink); text-align: left; background: transparent; border: 0; border-radius: 6px; font-family: var(--font-sans); font-size: 14px; cursor: pointer; }
+.scenario-menu__item:hover:not(:disabled) { background: var(--action-tint); }
+.scenario-menu__item:focus-visible { outline: 2px solid var(--action); outline-offset: -2px; }
+.scenario-menu__item:disabled { color: var(--quiet); cursor: progress; }
+.scenario-menu__error { padding: 8px 10px 4px; color: var(--breach); font-size: 12px; }
+.scenario-menu--header { margin-right: 4px; }
+
 .simulation-note--home {
   min-height: 44px;
   justify-self: end;

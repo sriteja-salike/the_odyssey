@@ -55,6 +55,7 @@ describe("adaptive operations home", () => {
     expect(screen.getByText("Highest-priority decision")).toBeInTheDocument();
     expect(screen.getByText("Ready to help with today’s decisions")).toBeInTheDocument();
     expect(screen.getByText("1 connected operational system")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "What are the expected shipments?" })).toBeInTheDocument();
     expect(screen.queryByText(/USDA protein shipment delay/i)).not.toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole("button", { name: "Are any deliveries at risk?" }));
     expect(screen.getByText(/Route: \/assistant\?prompt=Are%20any%20deliveries%20at%20risk%3F/)).toBeInTheDocument();

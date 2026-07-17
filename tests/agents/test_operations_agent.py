@@ -48,6 +48,29 @@ def test_offline_agent_preserves_context_for_a_follow_up() -> None:
     assert outcome.selection.work_item_id == "SCN-E"
 
 
+def test_offline_agent_answers_connection_question_without_forcing_a_case() -> None:
+    outcome = OfflineOperationsAgent().route(
+        [{"role": "user", "content": "What are we connected to?"}],
+        work_items(),
+        current_work_item_id="SCN-A",
+    )
+
+    assert outcome.selection.response_type == "ANSWER"
+    assert outcome.selection.answer_style == "CONNECTIONS"
+    assert outcome.selection.work_item_id is None
+
+
+def test_offline_agent_routes_expected_shipments_to_inbound_work() -> None:
+    outcome = OfflineOperationsAgent().route(
+        [{"role": "user", "content": "What are the expected shipments?"}],
+        work_items(),
+    )
+
+    assert outcome.selection.response_type == "ANSWER"
+    assert outcome.selection.answer_style == "SHIPMENTS"
+    assert outcome.selection.work_item_id == "SCN-A"
+
+
 def test_live_operations_agent_uses_the_read_only_work_item_tool() -> None:
     output = {
         "response_type": "SAFE_STOP",
