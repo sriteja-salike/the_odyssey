@@ -1,0 +1,71 @@
+{
+  "schema_version": "scenario-package/1.0.0",
+  "package_id": "frozen-a-e",
+  "package_version": "1.0.0",
+  "scenario_keys": [
+    "scenario_a",
+    "scenario_b",
+    "scenario_c",
+    "scenario_d",
+    "scenario_e"
+  ],
+  "problem_type": "SINGLE_ACTION_CATALOG",
+  "solver_id": "catalog-enumeration",
+  "normalizer_id": "nourishops-snapshot-v1",
+  "result_contract": "decision-brief/1.0.0",
+  "source_inputs": [
+    {
+      "document_id": "category_policies.json",
+      "source_id": "org-policy",
+      "display_name": "Organizational policy registry",
+      "source_kind": "ORGANIZATIONAL_KNOWLEDGE",
+      "schema_name": "category_policies.schema.json"
+    },
+    {
+      "document_id": "warehouse.json",
+      "source_id": "warehouse-wms",
+      "display_name": "Warehouse management system",
+      "source_kind": "CURRENT_KNOWLEDGE",
+      "schema_name": "warehouse_constraints.schema.json"
+    },
+    {
+      "document_id": "historical_weekly_category_flow.json",
+      "source_id": "distribution-history",
+      "display_name": "Distribution history",
+      "source_kind": "CURRENT_KNOWLEDGE",
+      "schema_name": "historical_weekly_category_flow.schema.json"
+    },
+    {
+      "document_id": "planned_inbound.json",
+      "source_id": "receiving-erp",
+      "display_name": "Receiving and inbound ERP",
+      "source_kind": "CURRENT_KNOWLEDGE",
+      "schema_name": "planned_inbound.schema.json"
+    },
+    {
+      "document_id": "candidate_actions.json",
+      "source_id": "procurement-catalog",
+      "display_name": "Procurement and response catalog",
+      "source_kind": "ORGANIZATIONAL_KNOWLEDGE",
+      "schema_name": "candidate_actions.schema.json"
+    },
+    {
+      "document_id": "pending_donation_offers.json",
+      "source_id": "donor-crm",
+      "display_name": "Donation offer CRM",
+      "source_kind": "CURRENT_KNOWLEDGE",
+      "schema_name": "pending_donation_offers.schema.json"
+    },
+    {
+      "document_id": "evidence_records.json",
+      "source_id": "knowledge-inbox",
+      "display_name": "Operations knowledge inbox",
+      "source_kind": "ORGANIZATIONAL_KNOWLEDGE",
+      "schema_name": "evidence_records.schema.json"
+    }
+  ],
+  "overlay": {
+    "document_template": "scenarios/{scenario_key}.json",
+    "schema_name": "scenario_overlay.schema.json"
+  }
+}

@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from decimal import Decimal
 from pathlib import Path
+from typing import Mapping
 
 from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
@@ -28,6 +29,11 @@ _SCHEMA_OF = {
     "historical_weekly_category_flow.json": "historical_weekly_category_flow.schema.json",
     "planned_inbound.json": "planned_inbound.schema.json",
     "candidate_actions.json": "candidate_actions.schema.json",
+}
+
+_SUPPORTING_DOCS = {
+    "pending_donation_offers.json": "pending_donation_offers.schema.json",
+    "evidence_records.json": "evidence_records.schema.json",
 }
 
 
@@ -58,18 +64,54 @@ def _D(x) -> Decimal:
     return x if isinstance(x, Decimal) else Decimal(str(x))
 
 
-def load_scenario(scenario_id: str, validate: bool = True) -> Snapshot:
-    """Build a normalized Snapshot for a scenario id (e.g. 'scenario_a')."""
-    docs = {name: _load_json(FIXTURES / name) for name in _SCHEMA_OF}
-    overlay_doc = _load_json(FIXTURES / "scenarios" / f"{scenario_id}.json")
+def load_scenario_from_documents(
+    documents: Mapping[str, str], scenario_id: str, validate: bool = True,
+    overlay_schema_name: str = "scenario_overlay.schema.json",
+) -> Snapshot:
+    """Build a Snapshot from source-system JSON documents.
+
+    ``documents`` is the application boundary used by database-backed source
+    adapters. Keeping the conversion here means file fixtures and production-
+    shaped integrations run through the exact same normalization code.
+    """
+    docs = {
+        name: json.loads(documents[name], parse_float=Decimal)
+        for name in (*_SCHEMA_OF, *_SUPPORTING_DOCS)
+    }
+    overlay_name = f"scenarios/{scenario_id}.json"
+    overlay_doc = json.loads(documents[overlay_name], parse_float=Decimal)
     if validate:
-        # jsonschema's multipleOf needs native floats, so validate plain-parsed
-        # copies; the engine still consumes the Decimal-parsed docs above.
         registry = _registry()
-        for name, schema in _SCHEMA_OF.items():
-            _validate(json.loads((FIXTURES / name).read_text()), schema, registry)
-        _validate(json.loads((FIXTURES / "scenarios" / f"{scenario_id}.json").read_text()),
-                  "scenario_overlay.schema.json", registry)
+        for name, schema in {**_SCHEMA_OF, **_SUPPORTING_DOCS}.items():
+            _validate(json.loads(documents[name]), schema, registry)
+        _validate(json.loads(documents[overlay_name]), overlay_schema_name, registry)
+
+    def require_references(field: str, document: str, identifier: str) -> set[str]:
+        selected = set(overlay_doc.get(field, []))
+        available = {item[identifier] for item in docs[document]["records"]}
+        missing = sorted(selected - available)
+        if missing:
+            raise ValueError(f"{field} contains unknown IDs: {', '.join(missing)}")
+        return selected
+
+    enabled = require_references("enabled_action_ids", "candidate_actions.json", "action_id")
+    active_offers = require_references(
+        "active_offer_ids", "pending_donation_offers.json", "offer_id",
+    )
+    active_ev = require_references("active_evidence_ids", "evidence_records.json", "evidence_id")
+
+    referenced_evidence: set[str] = set()
+    for action in docs["candidate_actions.json"]["records"]:
+        if action["action_id"] in enabled:
+            referenced_evidence.update(action.get("evidence_ids", []))
+    for offer in docs["pending_donation_offers.json"]["records"]:
+        if offer["offer_id"] in active_offers:
+            referenced_evidence.update(offer.get("evidence_ids", []))
+    inactive_evidence = sorted(referenced_evidence - active_ev)
+    if inactive_evidence:
+        raise ValueError(
+            "Enabled records reference inactive evidence: " + ", ".join(inactive_evidence)
+        )
 
     policies = {p["category_id"]: Policy(
         category_id=p["category_id"], priority_weight=_D(p["priority_weight"]),
@@ -114,7 +156,6 @@ def load_scenario(scenario_id: str, validate: bool = True) -> Snapshot:
             usable_life_days=int(rec["usable_life_days"]),
         ))
 
-    enabled = set(overlay_doc.get("enabled_action_ids", []))
     actions: list[Action] = []
     for r in docs["candidate_actions.json"]["records"]:
         if r["action_id"] not in enabled:
@@ -135,22 +176,20 @@ def load_scenario(scenario_id: str, validate: bool = True) -> Snapshot:
         ))
 
     # Active pending donation offers (Scenarios B and C).
-    active_offers = set(overlay_doc.get("active_offer_ids", []))
     offers = [Offer(
         offer_id=o["offer_id"], category_id=o["category_id"], gross_lb=_D(o["gross_quantity_lb"]),
         arrival_week_start=o["arrival_week_start"], yield_ratio=_D(o["expected_usable_yield_ratio"]),
         usable_life_days=int(o["usable_life_days"]), storage=o["storage_type"],
-    ) for o in _load_json(FIXTURES / "pending_donation_offers.json")["records"]
+    ) for o in docs["pending_donation_offers.json"]["records"]
         if o["offer_id"] in active_offers]
 
     # Active evidence (minimal projection) for data-quality validation.
-    active_ev = set(overlay_doc.get("active_evidence_ids", []))
     evidence = [{
         "evidence_id": e["evidence_id"], "trust_level": e["trust_level"],
         "related_record_ids": e.get("related_record_ids", []),
         "structured_facts": e.get("structured_facts", []),
         "contains_instruction_like_text": e.get("contains_instruction_like_text", False),
-    } for e in _load_json(FIXTURES / "evidence_records.json")["records"]
+    } for e in docs["evidence_records.json"]["records"]
         if e["evidence_id"] in active_ev]
 
     return Snapshot(
@@ -160,3 +199,12 @@ def load_scenario(scenario_id: str, validate: bool = True) -> Snapshot:
         primary_risk_type=overlay_doc.get("primary_risk_type", "SHORTAGE"),
         offers=offers, raw_inbound_records=raw_inbounds, evidence=evidence,
     )
+
+
+def load_scenario(scenario_id: str, validate: bool = True) -> Snapshot:
+    """Build a normalized Snapshot from the committed local fixtures."""
+    names = (*_SCHEMA_OF, *_SUPPORTING_DOCS)
+    documents = {name: (FIXTURES / name).read_text() for name in names}
+    overlay_name = f"scenarios/{scenario_id}.json"
+    documents[overlay_name] = (FIXTURES / overlay_name).read_text()
+    return load_scenario_from_documents(documents, scenario_id, validate)

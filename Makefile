@@ -4,7 +4,7 @@
 # from the repo root and pass no unquoted absolute paths.
 PYTHON ?= python3
 
-.PHONY: help doctor guard test-contracts test-golden test
+.PHONY: help doctor guard test-contracts test-golden test-agent test-integration test agent-smoke demo demo-down demo-logs
 
 help:
 	@echo "Live backend targets:"
@@ -12,7 +12,24 @@ help:
 	@echo "  make guard           fail if the engine leaks binary floats (04 §4.0)"
 	@echo "  make test-contracts  schema-validate all goldens/fixtures/overlays (18)"
 	@echo "  make test-golden     recompute Scenario A anchors vs golden (Decimal)"
-	@echo "  make test            guard + contracts + golden"
+	@echo "  make test-agent      provider-neutral agent and safety tests (no network/key)"
+	@echo "  make test-integration PostgreSQL lifecycle, parity, and idempotency tests"
+	@echo "  make test            guard + contracts + golden + agent tests"
+	@echo "  make agent-smoke     one real Anthropic call through the running API"
+	@echo "  make demo            start PostgreSQL, API, and UI with synthetic data"
+	@echo "  make demo-down       stop Docker services and retain demo data"
+	@echo "  make demo-logs       follow API and UI logs"
+
+demo:
+	docker compose up --build -d
+	@echo "NourishOps: http://127.0.0.1:5173"
+	@echo "API docs:   http://127.0.0.1:8180/docs"
+
+demo-down:
+	docker compose down
+
+demo-logs:
+	docker compose logs -f api web
 
 doctor:
 	@echo "python       : $$($(PYTHON) --version 2>&1)"
@@ -29,4 +46,13 @@ test-contracts:
 test-golden:
 	@$(PYTHON) -m pytest tests/golden -q
 
-test: guard test-contracts test-golden
+test-agent:
+	@uv run pytest tests/agents -q
+
+test-integration:
+	@NOURISHOPS_TEST_DATABASE_URL=$${NOURISHOPS_TEST_DATABASE_URL:-postgresql://nourishops:nourishops@127.0.0.1:55432/nourishops} uv run pytest tests/integration -q
+
+agent-smoke:
+	@uv run python scripts/smoke_agent.py
+
+test: guard test-contracts test-golden test-agent

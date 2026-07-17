@@ -13,7 +13,7 @@ counts as locally dispositioned ahead of the unknown-expiry starting lot.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from decimal import Decimal
 
 from .model import CATEGORY_ORDER, STORAGE_ORDER, Snapshot
@@ -122,7 +122,9 @@ def project_category(
         unmet = forecast_c - fulfilled if forecast_c > available else ZERO
 
         remaining = fulfilled
-        for lot in sorted(lots, key=lambda l: (l.expiry_idx, l.arrival_seq, l.lot_id)):
+        for lot in sorted(
+            lots, key=lambda item: (item.expiry_idx, item.arrival_seq, item.lot_id),
+        ):
             if remaining <= ZERO:
                 break
             take = min(lot.usable_lb, remaining)

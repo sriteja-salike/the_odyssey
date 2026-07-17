@@ -1,8 +1,7 @@
 /* Audit (01 §3.3, §6.6): one chronological event surface; each row reveals a
    details view with inputs/outputs, source IDs, and versions. Events + details
-   are derived from the golden (the API's audit oracle) until the real append-only
-   run_events endpoint exists. */
-import { useState } from "react";
+   are loaded from the append-only PostgreSQL event stream. */
+import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import AppFrame from "../components/AppFrame";
 import NotFoundRun from "./NotFoundRun";
@@ -12,6 +11,7 @@ import { letterFromRunId } from "../lib/run";
 import { CATEGORY_LABEL } from "../lib/categories";
 import { lb, usd, weeks, wos, date, titleCase } from "../lib/format";
 import type { AuditEvent } from "../types/golden";
+import { getEvents, type LiveEvent } from "../lib/liveApi";
 
 const EVENT_LABEL: Record<string, string> = {
   RUN_CREATED: "Run created",
@@ -22,16 +22,27 @@ const EVENT_LABEL: Record<string, string> = {
   RECOMMENDATION_PREPARED: "Recommendation prepared",
   MANAGER_APPROVED: "Manager approved",
   SIMULATED_ACTION_APPLIED: "Simulated action applied",
+  RECOMMENDATION_FEEDBACK: "Recommendation feedback recorded",
 };
 
 export default function Audit() {
   const { runId = "" } = useParams();
   const letter = letterFromRunId(runId);
   const [open, setOpen] = useState<number | null>(null);
+  const [liveEvents, setLiveEvents] = useState<LiveEvent[] | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    getEvents(runId).then(setLiveEvents).catch((reason: Error) => setError(reason.message));
+  }, [runId]);
 
   if (!letter) return <NotFoundRun />;
   const golden = getGolden(letter);
-  const events = golden.audit_oracle ?? [];
+  const events: AuditEvent[] = (liveEvents ?? []).map((event) => ({
+    sequence: event.sequence_no,
+    event_type: event.event_type,
+    semantic_id: event.event_id,
+  }));
   const v = golden as unknown as Record<string, string>;
 
   return (
@@ -55,7 +66,11 @@ export default function Audit() {
 
         <section className="card">
           <h2 className="sec">Events</h2>
-          {events.length === 0 ? (
+          {error ? (
+            <p className="field__err" role="alert">{error}</p>
+          ) : liveEvents === null ? (
+            <p className="hint">Loading the append-only event stream…</p>
+          ) : events.length === 0 ? (
             <p>No events have been recorded for this run.</p>
           ) : (
             <table className="table">

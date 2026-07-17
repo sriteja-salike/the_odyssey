@@ -5,3 +5,14 @@ templates, no key. Optional live LLM: extract_notice / orchestrate / explain
 ONLY. record_manager_decision is never an LLM-callable tool (00 §5). Live and
 offline paths must return identical numbers and rankings.
 """
+
+from nourishops.agents.contracts import AgentExplanation, AgentMetadata, AgentOutcome
+from nourishops.agents.runtime import ResilientDecisionAgent, build_decision_agent
+
+__all__ = [
+    "AgentExplanation",
+    "AgentMetadata",
+    "AgentOutcome",
+    "ResilientDecisionAgent",
+    "build_decision_agent",
+]

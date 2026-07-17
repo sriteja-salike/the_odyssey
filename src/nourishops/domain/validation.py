@@ -6,7 +6,7 @@ preserved as evidence and ignored, never executed (04 §17.3 / 06 red-team).
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from decimal import Decimal
 
 from .model import Snapshot

@@ -1,18 +1,20 @@
 /* Result workspace (01 §4.6–4.8, §6.4): the committed decision outcome.
    APPROVED shows before/after heal; REJECTED/DEFERRED keep the risk and state the
    projection is unchanged. Simulation-only note; comparison + audit links. */
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Check, CircleAlert, ICON, ICON_SM } from "./icons";
 import { getGolden, getActionMap, type ScenarioLetter } from "../lib/api";
 import { CATEGORY_LABEL } from "../lib/categories";
 import { lb, usd, weeks, wos } from "../lib/format";
 import type { Decision } from "../lib/runState";
+import { submitFeedback, type LiveExecution } from "../lib/liveApi";
 
 const TOTAL_BUDGET = 20000; // synthetic budget cap (golden BUDGET limit).
 
 export default function ResultWorkspace({
-  letter, runId, decision, onReset,
-}: { letter: ScenarioLetter; runId: string; decision: Decision; onReset: () => void }) {
+  letter, runId, decision, execution, feedbackRecorded = false, onReset,
+}: { letter: ScenarioLetter; runId: string; decision: Decision; execution?: LiveExecution; feedbackRecorded?: boolean; onReset: () => void }) {
   const golden = getGolden(letter);
   const actions = getActionMap(golden.scenario_id);
   const risk = golden.risks.find((r) => r.is_primary) ?? golden.risks[0];
@@ -25,6 +27,12 @@ export default function ResultWorkspace({
       <Link className="btn btn--secondary" to={`/runs/${runId}/audit`}>View audit record</Link>
       <button className="btn btn--ghost" onClick={onReset}>Start clean run</button>
     </div>
+  );
+  const followup = (
+    <>
+      {execution && <ExecutionCard execution={execution} />}
+      <FeedbackCard runId={runId} feedbackRecorded={feedbackRecorded} />
+    </>
   );
 
   if (decision.kind === "reject") {
@@ -41,6 +49,7 @@ export default function ResultWorkspace({
         {decision.reason && (
           <section className="card"><h2 className="sec">Manager reason</h2><p>{decision.reason}</p></section>
         )}
+        {followup}
         {links}
       </div>
     );
@@ -59,6 +68,7 @@ export default function ResultWorkspace({
         {decision.reason && (
           <section className="card"><h2 className="sec">Deferral note</h2><p>{decision.reason}</p></section>
         )}
+        {followup}
         {links}
       </div>
     );
@@ -104,6 +114,7 @@ export default function ResultWorkspace({
               : "Some risks remain open — see the comparison."}
           </p>
         </section>
+        {followup}
         {links}
       </div>
     );
@@ -145,8 +156,85 @@ export default function ResultWorkspace({
           {residual > 0 ? " Some risk remains open — see the comparison." : ""}
         </p>
       </section>
+      {followup}
       {links}
     </div>
+  );
+}
+
+function ExecutionCard({ execution }: { execution: LiveExecution }) {
+  return (
+    <section className="card execution-card">
+      <div>
+        <span className="pill pill--ok"><Check size={ICON_SM} aria-hidden /> Ready to act</span>
+        <h2 className="execution-card__title">Simulated request created</h2>
+        <p className="hint">
+          The recommendation has been converted into an executable {execution.execution_type.toLowerCase().replaceAll("_", " ")}.
+          In a production connection, this is the handoff to the authorized operations system.
+        </p>
+      </div>
+      <dl className="execution-card__facts">
+        <div><dt>Request ID</dt><dd className="mono">{execution.execution_id}</dd></div>
+        <div><dt>Status</dt><dd>{execution.status === "SIMULATED_SUBMITTED" ? "Submitted in simulation" : execution.status}</dd></div>
+        <div><dt>Target</dt><dd>{execution.target_system}</dd></div>
+        <div><dt>External write</dt><dd>{execution.external_write_performed ? "Completed" : "Not performed"}</dd></div>
+      </dl>
+    </section>
+  );
+}
+
+function FeedbackCard({ runId, feedbackRecorded }: { runId: string; feedbackRecorded: boolean }) {
+  const [rating, setRating] = useState<"HELPFUL" | "NOT_HELPFUL" | null>(null);
+  const [reason, setReason] = useState("");
+  const [actionability, setActionability] = useState("");
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState("");
+
+  async function send() {
+    if (!rating) return;
+    setError("");
+    try {
+      await submitFeedback(runId, rating, reason, actionability ? { actionability } : {});
+      setSent(true);
+    } catch (cause) {
+      setError((cause as Error).message);
+    }
+  }
+
+  if (sent || feedbackRecorded) {
+    return <section className="feedback-card feedback-card--sent"><Check size={ICON_SM} aria-hidden /> Feedback recorded for this recommendation.</section>;
+  }
+
+  return (
+    <section className="card feedback-card">
+      <div>
+        <h2 className="sec">Was this recommendation useful?</h2>
+        <p className="hint">Your response is attached to this run for later, reviewed improvement.</p>
+      </div>
+      <div className="feedback-card__choices" role="group" aria-label="Recommendation feedback">
+        <button className={`btn btn--secondary btn--sm ${rating === "HELPFUL" ? "btn--selected" : ""}`} onClick={() => setRating("HELPFUL")}>Yes, helpful</button>
+        <button className={`btn btn--secondary btn--sm ${rating === "NOT_HELPFUL" ? "btn--selected" : ""}`} onClick={() => setRating("NOT_HELPFUL")}>Not quite</button>
+      </div>
+      {rating && (
+        <div className="feedback-card__detail">
+          <label className="field">
+            <span>What should we learn? <small>(optional)</small></span>
+            <textarea rows={2} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} />
+          </label>
+          <label className="field">
+            <span>Quick check <small>(optional)</small></span>
+            <select value={actionability} onChange={(event) => setActionability(event.target.value)}>
+              <option value="">How actionable was it?</option>
+              <option value="IMMEDIATE">I could act immediately</option>
+              <option value="NEEDED_REVIEW">It needed some review</option>
+              <option value="NOT_ACTIONABLE">It was not actionable</option>
+            </select>
+          </label>
+          <button className="btn btn--primary btn--sm" onClick={() => void send()}>Send feedback</button>
+        </div>
+      )}
+      {error && <p className="field__err" role="alert">{error}</p>}
+    </section>
   );
 }
 

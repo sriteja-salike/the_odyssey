@@ -24,6 +24,7 @@ tmp/
 # Generated (05 §5): app writes only here
 .local/
 apps/web/dist/
+*.tsbuildinfo
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/

@@ -1,9 +1,9 @@
 /* Decision workspace (01 §3.1, §4): drives the full loop by run phase —
    DRAFT → ANALYZING → READY_FOR_REVIEW → APPROVED / REJECTED / DEFERRED, plus
-   ABSTAINED. All numbers come from the golden (the API contract); the UI only
-   formats them and records the human decision. */
-import { useState } from "react";
-import { useParams } from "react-router-dom";
+   ABSTAINED. PostgreSQL/FastAPI owns the durable lifecycle, while the current
+   Scenario A renderer formats the frozen golden-shaped presentation contract. */
+import { useCallback, useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import AppFrame from "../components/AppFrame";
 import ProjectionChart, { type WeekPoint } from "../components/ProjectionChart";
 import DraftWorkspace from "../components/DraftWorkspace";
@@ -15,7 +15,8 @@ import NotFoundRun from "./NotFoundRun";
 import { Check, X, AlertTriangle, ShieldCheck, ICON, ICON_SM } from "../components/icons";
 import { getGolden, getActionMap, getOverlay, type ScenarioLetter, type ActionRecord } from "../lib/api";
 import { letterFromRunId } from "../lib/run";
-import { useRunState, resetRun, type RunState } from "../lib/runState";
+import { useRunState, type Decision, type RunState } from "../lib/runState";
+import { createRun, decideRun, evaluateRun, getRun, type LiveRun } from "../lib/liveApi";
 import { CATEGORY_LABEL } from "../lib/categories";
 import { lb, usd, weeks, wos, date, dateShort, weekLabel, titleCase, int } from "../lib/format";
 import type { ConservativeWeek, ExpectedWeek } from "../types/golden";
@@ -25,30 +26,78 @@ const HARD_CONSTRAINTS = ["Budget", "Frozen storage", "Lead time", "Usable life"
 
 export default function DecisionWorkspace() {
   const { runId = "" } = useParams();
+  const navigate = useNavigate();
   const letter = letterFromRunId(runId);
   const [state, setState] = useRunState(runId);
+  const [liveRun, setLiveRun] = useState<LiveRun | null>(null);
+  const [error, setError] = useState("");
   const [confirmReset, setConfirmReset] = useState(false);
 
-  if (!letter) return <NotFoundRun />;
-  const golden = getGolden(letter);
+  useEffect(() => {
+    if (!letter) return;
+    getRun(runId).then((run) => {
+      setLiveRun(run);
+      const decision = run.decision ? {
+        kind: run.decision.kind,
+        actionId: run.decision.action_id,
+        quantityLb: run.decision.quantity_lb,
+        reason: run.decision.reason,
+      } : undefined;
+      setState({ phase: run.state, decision, selection: state.selection });
+    }).catch((reason: Error) => setError(reason.message));
+    // The selection is intentionally browser-local until a manager commits it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [letter, runId, setState]);
 
-  function analyzed() {
-    // Commit the golden's analysis outcome (READY_FOR_REVIEW or ABSTAINED).
-    setState({ phase: golden.decision_status === "ABSTAINED" ? "ABSTAINED" : "READY_FOR_REVIEW" });
+  const startAnalysis = useCallback(async () => {
+    setError("");
+    setState({ phase: "ANALYZING" });
+    try {
+      const run = await evaluateRun(runId);
+      setLiveRun(run);
+      setState({ phase: run.state });
+    } catch (reason) {
+      setError((reason as Error).message);
+      setState({ phase: "DRAFT" });
+    }
+  }, [runId, setState]);
+
+  async function commitDecision(decision: Decision) {
+    setError("");
+    try {
+      const run = await decideRun(runId, decision);
+      setLiveRun(run);
+      setState({ phase: run.state, decision });
+    } catch (reason) {
+      setError((reason as Error).message);
+    }
   }
-  function startClean() {
-    resetRun(runId);
+
+  async function startClean() {
+    if (!letter) return;
+    const run = await createRun(letter, runId);
     setConfirmReset(false);
+    navigate(`/runs/${run.run_id}`);
   }
+
+  if (!letter) return <NotFoundRun />;
+  if (!liveRun && !error) return <div className="main"><p className="hint">Loading the saved simulation…</p></div>;
+  if (!liveRun && error) return <NotFoundRun />;
 
   return (
     <AppFrame runId={runId} letter={letter} active="decision" onStartClean={() => setConfirmReset(true)}>
-      {state.phase === "DRAFT" && <DraftWorkspace letter={letter} onAnalyze={() => setState({ phase: "ANALYZING" })} />}
-      {state.phase === "ANALYZING" && <StageTrace onDone={analyzed} />}
-      {state.phase === "READY_FOR_REVIEW" && <Review letter={letter} state={state} commit={setState} />}
+      {error && <div className="service-error" role="alert">{error}</div>}
+      {state.phase === "DRAFT" && <DraftWorkspace letter={letter} onAnalyze={startAnalysis} />}
+      {state.phase === "ANALYZING" && <StageTrace onDone={() => undefined} />}
+      {state.phase === "READY_FOR_REVIEW" && (
+        <Review letter={letter} state={state} commit={setState}
+          onDecision={commitDecision} knowledge={liveRun?.knowledge} />
+      )}
       {state.phase === "ABSTAINED" && <SafeStop status="ABSTAINED" letter={letter} />}
       {(state.phase === "APPROVED" || state.phase === "REJECTED" || state.phase === "DEFERRED") && state.decision && (
-        <ResultWorkspace letter={letter} runId={runId} decision={state.decision} onReset={() => resetRun(runId)} />
+        <ResultWorkspace letter={letter} runId={runId} decision={state.decision}
+          execution={liveRun?.execution ?? undefined} feedbackRecorded={Boolean(liveRun?.feedback)}
+          onReset={() => setConfirmReset(true)} />
       )}
 
       {confirmReset && (
@@ -68,7 +117,13 @@ export default function DecisionWorkspace() {
 /* ---------------------------------------------------------------- Review --- */
 type DialogKind = null | "approve" | "reject" | "defer" | "edit";
 
-function Review({ letter, state, commit }: { letter: ScenarioLetter; state: RunState; commit: (s: RunState) => void }) {
+function Review({ letter, state, commit, onDecision, knowledge }: {
+  letter: ScenarioLetter;
+  state: RunState;
+  commit: (s: RunState) => void;
+  onDecision: (decision: Decision) => Promise<void>;
+  knowledge?: LiveRun["knowledge"];
+}) {
   const golden = getGolden(letter);
   const actions = getActionMap(golden.scenario_id);
   const risk = golden.risks.find((r) => r.is_primary) ?? golden.risks[0];
@@ -103,8 +158,8 @@ function Review({ letter, state, commit }: { letter: ScenarioLetter; state: RunS
   function useRecommended() {
     commit({ phase: "READY_FOR_REVIEW" });
   }
-  function approve() {
-    commit({ phase: "APPROVED", decision: { kind: nonDefault ? "edit-approve" : "approve", actionId: selId, quantityLb: selQty, reason: nonDefault ? reason.trim() : undefined } });
+  async function approve() {
+    await onDecision({ kind: nonDefault ? "edit-approve" : "approve", actionId: selId, quantityLb: selQty, reason: nonDefault ? reason.trim() : undefined });
   }
 
   const catLabel = CATEGORY_LABEL[risk.category_id];
@@ -304,6 +359,27 @@ function Review({ letter, state, commit }: { letter: ScenarioLetter; state: RunS
 
       {/* EVIDENCE / CONTEXT RAIL */}
       <aside className="col" id="evidence">
+        {knowledge && (
+          <section className="card source-card">
+            <h2 className="sec">Knowledge used</h2>
+            <p className="hint">Live connector snapshots loaded from PostgreSQL for this run.</p>
+            <h3 className="source-card__group">Current operations</h3>
+            {knowledge.current.map((source) => (
+              <div className="evrow" key={source.source_id}>
+                <span>{source.display_name}<div className="ev-id mono">{source.source_id}</div></span>
+                <span className="source-ok"><Check size={12} aria-hidden /> synced</span>
+              </div>
+            ))}
+            <h3 className="source-card__group">Organizational knowledge</h3>
+            {knowledge.organizational.map((source) => (
+              <div className="evrow" key={source.source_id}>
+                <span>{source.display_name}<div className="ev-id mono">{source.source_id}</div></span>
+                <span className="source-ok"><Check size={12} aria-hidden /> synced</span>
+              </div>
+            ))}
+          </section>
+        )}
+
         <section className="card">
           <h2 className="sec">What changed</h2>
           <div className="evrow"><span>Shipment</span><span className="evrow__v mono">{change.inboundId}</span></div>
@@ -361,11 +437,17 @@ function Review({ letter, state, commit }: { letter: ScenarioLetter; state: RunS
       )}
 
       {dialog === "reject" && (
-        <RejectDialog onClose={() => setDialog(null)} onConfirm={(r) => { setDialog(null); commit({ phase: "REJECTED", decision: { kind: "reject", actionId: selId, quantityLb: selQty, reason: r } }); }} />
+        <RejectDialog onClose={() => setDialog(null)} onConfirm={(r) => {
+          setDialog(null);
+          void onDecision({ kind: "reject", actionId: selId, quantityLb: selQty, reason: r });
+        }} />
       )}
 
       {dialog === "defer" && (
-        <DeferDialog onClose={() => setDialog(null)} onConfirm={(r) => { setDialog(null); commit({ phase: "DEFERRED", decision: { kind: "defer", actionId: selId, quantityLb: selQty, reason: r } }); }} />
+        <DeferDialog onClose={() => setDialog(null)} onConfirm={(r) => {
+          setDialog(null);
+          void onDecision({ kind: "defer", actionId: selId, quantityLb: selQty, reason: r });
+        }} />
       )}
 
       {dialog === "edit" && selAction && (

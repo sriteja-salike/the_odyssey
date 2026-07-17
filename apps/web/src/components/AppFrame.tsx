@@ -3,8 +3,8 @@
    notice — present on every route. */
 import { NavLink, useNavigate } from "react-router-dom";
 import { AlertTriangle, ICON_SM } from "./icons";
-import { SCENARIOS, syntheticRunId, getOverlay, type ScenarioLetter } from "../lib/api";
-import { resetRun } from "../lib/runState";
+import { SCENARIOS, getOverlay, type ScenarioLetter } from "../lib/api";
+import { createRun } from "../lib/liveApi";
 import { date } from "../lib/format";
 
 // Exact persistent notice — verbatim from 00_BUILD_CONTRACT.md.
@@ -23,18 +23,16 @@ export default function AppFrame({ runId, letter, active, onStartClean, children
   const navigate = useNavigate();
   const overlay = getOverlay(letter);
 
-  function defaultStartClean() {
-    // Non-decision routes: reset and return to the Decision route.
-    resetRun(runId);
-    navigate(`/runs/${runId}`);
+  async function defaultStartClean() {
+    const run = await createRun(letter, runId);
+    navigate(`/runs/${run.run_id}`);
   }
 
-  function onScenarioChange(e: React.ChangeEvent<HTMLSelectElement>) {
+  async function onScenarioChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const next = e.target.value as ScenarioLetter;
     if (next === letter) return;
-    // Selecting another scenario starts its run (01 §3; confirmation dialog is a
-    // later increment). Prior runs remain reachable by URL.
-    navigate(`/runs/${syntheticRunId(next)}`);
+    const run = await createRun(next);
+    navigate(`/runs/${run.run_id}`);
   }
 
   return (

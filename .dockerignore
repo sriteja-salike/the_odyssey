@@ -1,0 +1,11 @@
+.git
+.env
+.venv
+.local
+**/__pycache__
+**/node_modules
+apps/web/dist
+deliverables
+reference
+*.pdf
+*.docx

@@ -56,7 +56,6 @@ def _confidence(snap, ctx, top: Eval, second: Eval | None, warnings: int) -> dic
 
 
 def _build_context(snap: Snapshot, primary, shortages) -> Context:
-    letter = snap.scenario_id.split("-")[1]
     if primary.risk_type == "SHORTAGE":
         c = primary.category_id
         return Context("SHORTAGE", primary.risk_id, categories=[c],

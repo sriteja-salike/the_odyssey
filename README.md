@@ -40,9 +40,49 @@ The prototype runs on synthetic, labeled data. We may say it detects predefined 
 
 ---
 
-## Backend build (`src/nourishops/`) — status
+## Running the production-shaped simulation
 
-Scaffold + contract harness in place; the deterministic engine is next. Runnable today with only `jsonschema` + `pytest` (no full install needed):
+Docker starts PostgreSQL, FastAPI, and the React demo; startup migrations seed synthetic connector snapshots for the warehouse, receiving ERP, distribution history, donor CRM, procurement catalog, policy registry, and operations knowledge inbox. The backend evaluates all frozen Scenarios A–E through one versioned scenario-package, solver, agent, persistence, and API path. The current UI remains the legacy golden-backed demo and will be redesigned against the typed decision brief after backend scenario work.
+
+```bash
+make demo
+```
+
+Open [http://127.0.0.1:5173](http://127.0.0.1:5173). API documentation is at [http://127.0.0.1:8180/docs](http://127.0.0.1:8180/docs), and PostgreSQL is exposed locally on port `55432` to avoid common development-service collisions.
+
+The shared decision path is:
+
+1. create an append-only run;
+2. load current and organizational knowledge through PostgreSQL connector snapshots;
+3. select an explicit deterministic solver by problem type;
+4. let the provider-neutral AI layer explain only the verified recommendation package;
+5. persist the recommendation and manager decision with replay protection;
+6. create a clearly labeled simulated execution request;
+7. capture recommendation feedback and optional survey context;
+8. show the actual persisted event stream in Audit.
+
+All records and outcomes remain synthetic. `SIMULATED_SUBMITTED` never performs an external write.
+
+### Anthropic now, OpenAI-compatible later
+
+Offline mode is the safe default. For one real Claude verification, copy `.env.example`
+to the gitignored `.env`, set `NOURISHOPS_AGENT_MODE=live`, and add
+`ANTHROPIC_API_KEY`. Then run:
+
+```bash
+make demo
+make agent-smoke
+```
+
+The key is read only by the backend container. The browser never receives it. If live
+configuration or provider output fails validation, the same deterministic result is
+returned with an explicit offline-fallback status. OpenAI uses the same adapter and
+typed output contract by changing provider, model, and key environment settings.
+
+Architecture and the new-scenario checklist are in
+[`docs/decision-platform-architecture.md`](docs/decision-platform-architecture.md).
+
+## Build and verification
 
 | Command | What it does |
 |---|---|
@@ -50,6 +90,13 @@ Scaffold + contract harness in place; the deterministic engine is next. Runnable
 | `make guard` | Fails if the engine leaks a binary float — enforces the Decimal rule (`04 §4.0`) at commit time |
 | `make test-contracts` | Schema-validates all 5 goldens + 8 fixtures + 5 overlays (18 checks) |
 | `make test-golden` | Recomputes Scenario A's anchors (forecast 9,000 · breach W2 12,000 · gap 15,000 · priority 61) in Decimal **from fixtures** and asserts them against the golden |
-| `make test` | guard + contracts + golden |
+| `make test-agent` | Runs provider-neutral structured-output, authority, fallback, retry, and configuration tests without a key or network |
+| `make test-integration` | Runs PostgreSQL lifecycle, immutable-input, parity, idempotency, rollback, and concurrency tests |
+| `make test` | guard + contracts + goldens + agent tests |
+| `make agent-smoke` | Makes one live Anthropic Scenario B evaluation through the public API |
+| `make demo` | Builds and starts PostgreSQL + FastAPI + React, seeding synthetic source-system snapshots |
+| `make demo-down` | Stops the demo while retaining the PostgreSQL volume |
 
-Layout follows `BUILD_CONTEXT/05 §5`: `src/nourishops/{domain,application,agents,persistence,api,cli}`. The full toolchain (uv lockfile, FastAPI app, `make dev/build/start`, frontend) lands with the engine.
+The deterministic engine and backend decision substrate cover Scenarios A–E. The next
+phase is adding more verified scenario/problem packages and deterministic solver types;
+the user-centered UI redesign follows those backend contracts.

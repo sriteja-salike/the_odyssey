@@ -1,6 +1,5 @@
-"""Persistence (05 §6.6, §8) — local SQLite.
+"""Persistence adapters for connector snapshots and append-only run data."""
 
-Insert-only runs, append-only run_events, idempotency records, and a replaceable
-agent_cache. Serialization and transactions only; never recomputes domain math
-or edits prior events.
-"""
+from .postgres import PostgresStore
+
+__all__ = ["PostgresStore"]

@@ -1,0 +1,58 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: nourishops
+      POSTGRES_USER: nourishops
+      POSTGRES_PASSWORD: nourishops
+    ports:
+      - "55432:5432"
+    volumes:
+      - nourishops_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nourishops -d nourishops"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    environment:
+      NOURISHOPS_DATABASE_URL: postgresql://nourishops:nourishops@db:5432/nourishops
+      NOURISHOPS_ALLOWED_ORIGIN: http://127.0.0.1:5173
+      NOURISHOPS_ENV: demo
+      NOURISHOPS_AGENT_MODE: ${NOURISHOPS_AGENT_MODE:-offline}
+      NOURISHOPS_AGENT_PROVIDER: ${NOURISHOPS_AGENT_PROVIDER:-anthropic}
+      NOURISHOPS_AGENT_MODEL: ${NOURISHOPS_AGENT_MODEL:-claude-haiku-4-5}
+      NOURISHOPS_AGENT_TIMEOUT_SECONDS: ${NOURISHOPS_AGENT_TIMEOUT_SECONDS:-6}
+      NOURISHOPS_AGENT_DEADLINE_SECONDS: ${NOURISHOPS_AGENT_DEADLINE_SECONDS:-12}
+      NOURISHOPS_AGENT_MAX_RETRIES: ${NOURISHOPS_AGENT_MAX_RETRIES:-1}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    ports:
+      - "8180:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/ready')"]
+      interval: 4s
+      timeout: 3s
+      retries: 20
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+    environment:
+      VITE_API_PROXY_TARGET: http://api:8000
+    ports:
+      - "5173:5173"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  nourishops_postgres:
