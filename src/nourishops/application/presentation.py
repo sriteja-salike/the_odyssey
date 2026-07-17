@@ -89,6 +89,18 @@ class DecisionPresentation(BaseModel):
     suggested_questions: list[str]
 
 
+class ConnectedSource(BaseModel):
+    """A source-system label safe to show to an operations user."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_id: str
+    display_name: str
+    source_kind: Literal[
+        "CURRENT_KNOWLEDGE", "ORGANIZATIONAL_KNOWLEDGE", "SIMULATION_CONTROL"
+    ]
+
+
 class WorkItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -99,6 +111,7 @@ class WorkItem(BaseModel):
     urgency: Literal["NOW", "SOON", "ROUTINE"]
     due_label: str | None
     source_count: int
+    connected_sources: list[ConnectedSource] = Field(default_factory=list)
     presentation: DecisionPresentation
     primary_action_label: str
     synthetic: Literal[True]
@@ -296,7 +309,7 @@ def build_decision_presentation(
                 reference_value=str(minimum), reference_label=f"Minimum {_weeks(minimum)}",
             ),
             result_visual=DecisionVisualPresentation(
-                kind="coverage", title="What the simulation changed", summary=effect,
+                kind="coverage", title="Expected operational effect", summary=effect,
                 unit="weeks", data=[
                     _datum("Before", before, "weeks", "attention"),
                     _datum("After", after, "weeks", "positive"),
@@ -341,7 +354,7 @@ def build_decision_presentation(
                 data=data, reference_value=str(capacity), reference_label=f"Capacity {_lb(capacity)}",
             ),
             result_visual=DecisionVisualPresentation(
-                kind="capacity", title="What the simulation changed", summary=effect, unit="lb",
+                kind="capacity", title="Expected operational effect", summary=effect, unit="lb",
                 data=[_datum("Accept all", peak, "lb", "attention"), _datum("Approved", recommended_peak, "lb", "positive")],
                 reference_value=str(capacity), reference_label=f"Capacity {_lb(capacity)}",
             ),
@@ -374,7 +387,7 @@ def build_decision_presentation(
                 ],
             ),
             result_visual=DecisionVisualPresentation(
-                kind="mismatch", title="What the simulation changed", summary=effect, unit="lb",
+                kind="mismatch", title="Expected operational effect", summary=effect, unit="lb",
                 data=[_datum("Offered", offered, "lb", "attention"), _datum("Redirected", redirected, "lb", "positive")],
             ),
             detail_facts=[
@@ -412,7 +425,7 @@ def build_decision_presentation(
                 ], reference_value=str(available), reference_label=f"Available {_usd(available)}",
             ),
             result_visual=DecisionVisualPresentation(
-                kind="budget", title="What the simulation changed", summary=effect, unit="usd",
+                kind="budget", title="Expected operational effect", summary=effect, unit="usd",
                 data=[
                     _datum("Available", available, "usd"),
                     _datum("Approved", cost, "usd", "positive"),
@@ -460,7 +473,10 @@ def build_decision_presentation(
 
 
 def build_work_item(
-    scenario_key: str, analysis: dict[str, Any], context: dict[str, Any],
+    scenario_key: str,
+    analysis: dict[str, Any],
+    context: dict[str, Any],
+    connected_sources: list[dict[str, str]] | None = None,
 ) -> WorkItem:
     presentation = build_decision_presentation(analysis, context)
     status = analysis["decision_status"]
@@ -483,6 +499,7 @@ def build_work_item(
         urgency="NOW" if state == "INFORMATION_NEEDED" or primary.get("priority_score") == "100" else "SOON",
         due_label=f"Review by {due}" if due else None,
         source_count=source_count,
+        connected_sources=connected_sources or [],
         presentation=presentation,
         primary_action_label=(
             "Ask agent to review" if state == "NEEDS_REVIEW"

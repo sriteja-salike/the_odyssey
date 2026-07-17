@@ -1,35 +1,38 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { InlineLoading } from "@carbon/react";
-import { ArrowRight, ArrowUp, DataReference, Time } from "@carbon/icons-react";
+import { ArrowRight, ArrowUp, Chat, CheckmarkFilled, Locked, Time } from "@carbon/icons-react";
 import ProductShell from "../components/ProductShell";
-import { getWorkItems, startWorkItem, type WorkItem } from "../lib/liveApi";
+import ConnectedSources from "../components/ConnectedSources";
+import { getRecentRuns, getWorkItems, recentRunForCase, startWorkItem, type RecentRun, type WorkItem } from "../lib/liveApi";
 
 const EXAMPLE_PROMPTS = [
   "What needs my attention first?",
   "Are any deliveries at risk?",
   "Show inventory concerns",
-  "What are the expected shipments?",
 ];
 
 export default function Home() {
   const navigate = useNavigate();
   const [items, setItems] = useState<WorkItem[]>([]);
-  const [activeIndex, setActiveIndex] = useState(0);
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(true);
-  const [opening, setOpening] = useState(false);
+  const [opening, setOpening] = useState("");
   const [error, setError] = useState("");
-  const briefingRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     getWorkItems()
-      .then(setItems)
+      .then((workItems) => setItems([...workItems].sort((a, b) => queueScore(a) - queueScore(b))))
       .catch((reason: Error) => setError(reason.message))
       .finally(() => setLoading(false));
+    const preload = () => { void import("./DecisionWorkspace"); void import("./OperationsAssistant"); };
+    const idle = window.requestIdleCallback?.(preload) ?? window.setTimeout(preload, 300);
+    return () => window.cancelIdleCallback?.(idle) ?? window.clearTimeout(idle);
   }, []);
 
-  const active = items[activeIndex];
+  const recent = getRecentRuns();
+  const queue = useMemo(() => [...items].sort((a, b) => queueScore(a, recent) - queueScore(b, recent)), [items, recent]);
+  const active = queue[0];
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
     return hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
@@ -46,23 +49,25 @@ export default function Home() {
     ask(prompt);
   }
 
-  async function openCurrent() {
-    if (!active) return;
-    setOpening(true);
-    setError("");
-    try {
-      const run = await startWorkItem(active);
-      navigate(`/runs/${run.run_id}`);
-    } catch (reason) {
-      setError((reason as Error).message);
-      setOpening(false);
-    }
+  function askAbout(item: WorkItem, question = item.presentation.suggested_questions[0]) {
+    ask(`${question} ${item.presentation.issue.title}`);
   }
 
-  function continueBriefing() {
-    if (!items.length) return;
-    setActiveIndex((value) => (value + 1) % items.length);
-    requestAnimationFrame(() => briefingRef.current?.focus());
+  async function openCurrent(item: WorkItem) {
+    const existing = recentRunForCase(item.case_key);
+    if (existing) {
+      navigate(`/runs/${existing.run_id}`);
+      return;
+    }
+    setOpening(item.work_item_id);
+    setError("");
+    try {
+      const run = await startWorkItem(item);
+      navigate(`/runs/${run.run_id}`, { state: { autoAnalyze: true } });
+    } catch (reason) {
+      setError((reason as Error).message);
+      setOpening("");
+    }
   }
 
   return (
@@ -92,6 +97,20 @@ export default function Home() {
             <span>Examples:</span>
             {EXAMPLE_PROMPTS.map((item) => <button key={item} type="button" onClick={() => ask(item)}>{item}</button>)}
           </div>
+          {active && (
+            <section className="home-readiness" aria-label="ShareStack decision support status">
+              <div className="home-readiness__heading">
+                <span className="home-readiness__signal" aria-hidden />
+                <div><strong>Ready to help with today’s decisions</strong><small>Connected information, agent review, and safety checks are available.</small></div>
+              </div>
+              <div className="home-readiness__proof">
+                <span><CheckmarkFilled size={16} aria-hidden />Operational information connected</span>
+                <span><CheckmarkFilled size={16} aria-hidden />Decision agent ready to explain</span>
+                <span><Locked size={16} aria-hidden />You approve every response</span>
+              </div>
+              <ConnectedSources sources={active.connected_sources ?? []} label="See connected information" />
+            </section>
+          )}
         </section>
 
         <section className="agent-briefing" aria-labelledby="briefing-label">
@@ -99,12 +118,12 @@ export default function Home() {
           {loading && <div className="briefing-loading"><InlineLoading description="Checking verified operations data…" /></div>}
           {error && <div className="service-error" role="alert">{error}</div>}
           {active && (
-            <article className="briefing-card" ref={briefingRef} tabIndex={-1}>
+            <article className="briefing-card">
               <div className="briefing-card__intro">
-                <span className={`briefing-indicator briefing-indicator--${active.state.toLowerCase()}`} aria-hidden />
+                <span className={`briefing-indicator briefing-indicator--${statusTone(active, recent)}`} aria-hidden />
                 <div>
-                  <p>{active.state === "INFORMATION_NEEDED" ? "Verified records need to be resolved" : "Verified issue ready for agent review"}</p>
-                  <small>{activeIndex + 1} of {items.length} items in the current queue</small>
+                  <p>{active.state === "INFORMATION_NEEDED" ? "Resolve this first" : "Highest-priority decision"}</p>
+                  <small>{queue.length} verified situations in today’s queue · {statusLabel(active, recent)}</small>
                 </div>
               </div>
               <div className="briefing-card__body">
@@ -114,34 +133,72 @@ export default function Home() {
                   <p>{active.presentation.issue.summary}</p>
                   <div className="briefing-meta">
                     {active.due_label && <span><Time size={16} aria-hidden />{active.due_label}</span>}
-                    <span><DataReference size={16} aria-hidden />{active.source_count} verified sources</span>
+                    <span><CheckmarkFilled size={16} aria-hidden />{active.source_count} verified case records</span>
                   </div>
                 </div>
-                <button type="button" className="briefing-primary" onClick={() => void openCurrent()} disabled={opening}>
-                  {opening ? "Agent is reviewing…" : active.primary_action_label}<ArrowRight size={19} aria-hidden />
+                <button type="button" className="briefing-primary" onClick={() => void openCurrent(active)} disabled={opening === active.work_item_id}>
+                  {opening === active.work_item_id ? "Opening…" : actionLabel(active, recent)}<ArrowRight size={19} aria-hidden />
                 </button>
               </div>
               <div className="briefing-questions">
                 {active.presentation.suggested_questions.slice(0, 2).map((question) => (
-                  <button key={question} type="button" onClick={() => ask(`${question} ${active.presentation.issue.title}`)}>{question}<ArrowRight size={16} /></button>
+                  <button key={question} type="button" onClick={() => askAbout(active, question)}>{question}<ArrowRight size={16} /></button>
                 ))}
               </div>
             </article>
           )}
-          {items.length > 1 && (
-            <button type="button" className="briefing-next" onClick={continueBriefing}>
-              <span className="briefing-next__body">
-                <span className="briefing-next__label">Continue to next item</span>
-                <span className="briefing-next__title">
-                  Next up: {items[(activeIndex + 1) % items.length]?.presentation.issue.title}
-                </span>
-              </span>
-              <span className="briefing-next__meta">{((activeIndex + 1) % items.length) + 1} of {items.length}</span>
-              <span className="briefing-next__icon" aria-hidden><ArrowRight size={18} /></span>
-            </button>
-          )}
+          {queue.length > 1 && <div className="scenario-queue" aria-label="All verified situations">
+            <div className="scenario-queue__heading"><h2>All situations</h2><span>Ask about any item or open its decision</span></div>
+            {queue.slice(1).map((item) => <article className="scenario-row" key={item.work_item_id}>
+              <span className={`briefing-indicator briefing-indicator--${statusTone(item, recent)}`} aria-hidden />
+              <div className="scenario-row__copy">
+                <span>{item.presentation.issue.label} · {statusLabel(item, recent)}</span>
+                <h3>{item.presentation.issue.title}</h3>
+                <small>{item.due_label ?? `${item.source_count} verified case records`}</small>
+              </div>
+              <div className="scenario-row__actions">
+                <button type="button" onClick={() => askAbout(item)}><Chat size={17} aria-hidden />Ask</button>
+                <button type="button" className="scenario-row__open" onClick={() => void openCurrent(item)} disabled={opening === item.work_item_id}>
+                  {opening === item.work_item_id ? "Opening…" : actionLabel(item, recent)}<ArrowRight size={17} aria-hidden />
+                </button>
+              </div>
+            </article>)}
+          </div>}
         </section>
       </main>
     </ProductShell>
   );
+}
+
+function runFor(item: WorkItem, recent: RecentRun[]) {
+  return recent.find((run) => run.scenario_key === item.case_key);
+}
+
+function statusLabel(item: WorkItem, recent: RecentRun[]) {
+  const state = runFor(item, recent)?.state;
+  return ({ APPROVED: "Completed", REJECTED: "Rejected", DEFERRED: "Deferred", ABSTAINED: "Records conflict", READY_FOR_REVIEW: "Ready for review", NO_ACTION_REQUIRED: "No action needed", FAILED: "Review failed", STALE: "Needs refresh" } as Record<string, string>)[state ?? ""]
+    ?? (item.state === "INFORMATION_NEEDED" ? "Records conflict" : "Not reviewed");
+}
+
+function statusTone(item: WorkItem, recent: RecentRun[]) {
+  const state = runFor(item, recent)?.state;
+  if (state === "APPROVED" || state === "NO_ACTION_REQUIRED") return "complete";
+  if (state === "ABSTAINED" || state === "FAILED" || state === "STALE" || item.state === "INFORMATION_NEEDED") return "blocked";
+  if (state === "DEFERRED" || state === "REJECTED") return "open";
+  return "ready";
+}
+
+function actionLabel(item: WorkItem, recent: RecentRun[]) {
+  const state = runFor(item, recent)?.state;
+  if (state === "APPROVED" || state === "NO_ACTION_REQUIRED") return "View result";
+  if (state === "ABSTAINED") return "Review conflict";
+  if (state === "READY_FOR_REVIEW") return "Continue review";
+  if (state === "REJECTED" || state === "DEFERRED") return "View decision";
+  return item.primary_action_label;
+}
+
+function queueScore(item: WorkItem, recent: RecentRun[] = []) {
+  const state = runFor(item, recent)?.state;
+  const done = state === "APPROVED" || state === "NO_ACTION_REQUIRED" ? 10 : 0;
+  return done + ({ NOW: 0, SOON: 1, ROUTINE: 2 } as const)[item.urgency];
 }

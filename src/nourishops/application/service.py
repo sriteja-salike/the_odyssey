@@ -107,7 +107,17 @@ class NourishOpsService:
             analysis = jsonable(solver.solve(snapshot))
             validate_solver_result(analysis, snapshot.scenario_id)
             context = self.store.scenario_context(scenario_key)
-            work_items.append(build_work_item(scenario_key, analysis, context))
+            connected_sources = [
+                {
+                    "source_id": source.source_id,
+                    "display_name": source.display_name,
+                    "source_kind": source.source_kind,
+                }
+                for source in package.source_inputs
+            ]
+            work_items.append(build_work_item(
+                scenario_key, analysis, context, connected_sources,
+            ))
         return [item.model_dump(mode="json") for item in work_items]
 
     def answer_operations_question(
@@ -166,9 +176,9 @@ class NourishOpsService:
             return f"Start with {issue['title']} {issue['summary']}"
         if style == "SOURCES":
             return (
-                f"I matched this issue using {selected['source_count']} active evidence "
-                "records and the frozen operational snapshots. Open the review to see "
-                "each source and assumption."
+                f"I checked {selected['source_count']} case records using the connected "
+                "inventory, delivery, policy, capacity, and response information. Open "
+                "‘Information checked’ to see where it came from."
             )
         if style in {"CONFLICTS", "CORRECTION"}:
             conflicts = presentation["visual"].get("conflicts") or []
@@ -328,7 +338,7 @@ class NourishOpsService:
             duration_ms=0,
             input_sha256=run["contract_snapshot_hash"],
             output_sha256=context_hash,
-            summary="Pinned current, organizational, and scenario snapshots were loaded.",
+            summary="The operational information available when this review began was saved and checked.",
             details={
                 "document_count": len(run["input_manifest"]),
                 "current_sources": len(run["knowledge"]["current"]),
@@ -355,7 +365,7 @@ class NourishOpsService:
             duration_ms=solver_duration_ms,
             input_sha256=context_hash,
             output_sha256=analysis_output_hash,
-            summary="The deterministic solver evaluated and ranked the declared action catalog.",
+            summary="ShareStack compared the available responses against inventory, capacity, budget, and timing limits.",
             details={
                 "solver_id": solver.descriptor.solver_id,
                 "decision_status": result["decision_status"],
@@ -408,7 +418,7 @@ class NourishOpsService:
                 if safe_stop_outcome is not None
                 else "No recommendation required an explanation."
                 if package is None
-                else "The orchestrator produced a schema-validated, evidence-grounded explanation."
+                else "The decision agent explained the strongest safe response using the checked information."
             ),
             details={
                 "effective_mode": agent_metadata.effective_mode,

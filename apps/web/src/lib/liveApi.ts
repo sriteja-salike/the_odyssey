@@ -116,7 +116,42 @@ export function subscribeConnectivity(listener: () => void): () => void {
 }
 
 const keyForLetter = (letter: ScenarioLetter) => `nourishops:active-run:${letter}`;
+const RECENT_RUNS_KEY = "nourishops:recent-runs";
 const activePromises: Partial<Record<ScenarioLetter, Promise<LiveRun>>> = {};
+
+export interface RecentRun {
+  run_id: string;
+  scenario_key: string;
+  state: LiveRun["state"];
+  updated_at: string;
+}
+
+export function getRecentRuns(): RecentRun[] {
+  try {
+    const stored = JSON.parse(sessionStorage.getItem(RECENT_RUNS_KEY) ?? "[]") as RecentRun[];
+    const latest = sessionStorage.getItem("nourishops:last-run");
+    return latest && !stored.some((item) => item.run_id === latest)
+      ? [{ run_id: latest, scenario_key: "", state: "DRAFT", updated_at: "" }, ...stored]
+      : stored;
+  } catch {
+    return [];
+  }
+}
+
+export function recentRunForCase(caseKey: string): RecentRun | undefined {
+  return getRecentRuns().find((item) => item.scenario_key === caseKey);
+}
+
+function rememberRun(run: LiveRun): LiveRun {
+  if (run.state === "DRAFT") return run;
+  const next = [
+    { run_id: run.run_id, scenario_key: run.scenario_key, state: run.state, updated_at: new Date().toISOString() },
+    ...getRecentRuns().filter((item) => item.run_id !== run.run_id),
+  ].slice(0, 20);
+  sessionStorage.setItem(RECENT_RUNS_KEY, JSON.stringify(next));
+  sessionStorage.setItem("nourishops:last-run", run.run_id);
+  return run;
+}
 
 export async function createRun(letter: ScenarioLetter, parentRunId?: string): Promise<LiveRun> {
   if (OFFLINE) {
@@ -182,16 +217,7 @@ export async function getWorkItems(): Promise<WorkItem[]> {
 }
 
 export async function startWorkItem(item: WorkItem): Promise<LiveRun> {
-  return startCase(item.case_key);
-}
-
-/** Open a scenario directly by case key (e.g. "scenario_a"): create the run,
-    evaluate it, and remember it as the most recent run. */
-export async function startCase(caseKey: string): Promise<LiveRun> {
-  const draft = await createCaseRun(caseKey);
-  const evaluated = await evaluateRun(draft.run_id);
-  sessionStorage.setItem("nourishops:last-run", evaluated.run_id);
-  return evaluated;
+  return createCaseRun(item.case_key);
 }
 
 export async function askOperationsAssistant(
@@ -239,17 +265,17 @@ export async function getRun(runId: string): Promise<LiveRun> {
 }
 
 export async function evaluateRun(runId: string): Promise<LiveRun> {
-  if (OFFLINE) return oEvaluateRun(runId);
+  if (OFFLINE) return rememberRun(oEvaluateRun(runId));
   try {
-    return await request<LiveRun>(`/runs/${runId}/evaluate`, {
+    return rememberRun(await request<LiveRun>(`/runs/${runId}/evaluate`, {
       method: "POST",
       headers: idempotencyHeaders(),
       body: "{}",
-    }, 15_000);
+    }, 15_000));
   } catch (error) {
     if (!(error instanceof OfflineError)) throw error;
     markOffline();
-    return oEvaluateRun(runId);
+    return rememberRun(oEvaluateRun(runId));
   }
 }
 
@@ -324,13 +350,13 @@ export async function decideRun(runId: string, decision: {
   quantityLb: number;
   reason?: string;
 }): Promise<LiveRun> {
-  if (OFFLINE) return oDecideRun(runId, decision as Decision);
+  if (OFFLINE) return rememberRun(oDecideRun(runId, decision as Decision));
   try {
     const current = await getRun(runId);
     if (OFFLINE) return oDecideRun(runId, decision as Decision);
     const recommendationId = current.decision_brief?.recommendation?.recommendation_id;
     if (!recommendationId) throw new Error("Refresh the recommendation before deciding.");
-    return await request<LiveRun>(`/runs/${runId}/decisions`, {
+    return rememberRun(await request<LiveRun>(`/runs/${runId}/decisions`, {
       method: "POST",
       headers: idempotencyHeaders(),
       body: JSON.stringify({
@@ -341,11 +367,11 @@ export async function decideRun(runId: string, decision: {
         quantity_lb: decision.quantityLb,
         reason: decision.reason ?? null,
       }),
-    });
+    }));
   } catch (error) {
     if (!(error instanceof OfflineError)) throw error;
     markOffline();
-    return oDecideRun(runId, decision as Decision);
+    return rememberRun(oDecideRun(runId, decision as Decision));
   }
 }
 
@@ -414,12 +440,23 @@ function offlineWorkItems(): WorkItem[] {
       urgency: state === "INFORMATION_NEEDED" ? "NOW" : "SOON",
       due_label: due ? `Review by ${due}` : null,
       source_count: getScenarioEvidence(letter).length,
+      connected_sources: DEMO_CONNECTIONS,
       presentation,
       primary_action_label: state === "NEEDS_REVIEW" ? "Ask agent to review" : state === "INFORMATION_NEEDED" ? "Review blocking records" : "View details",
       synthetic: true,
     };
   });
 }
+
+const DEMO_CONNECTIONS: NonNullable<WorkItem["connected_sources"]> = [
+  { source_id: "warehouse-wms", display_name: "Warehouse management system", source_kind: "CURRENT_KNOWLEDGE" },
+  { source_id: "distribution-history", display_name: "Distribution history", source_kind: "CURRENT_KNOWLEDGE" },
+  { source_id: "receiving-erp", display_name: "Receiving and inbound ERP", source_kind: "CURRENT_KNOWLEDGE" },
+  { source_id: "donor-crm", display_name: "Donation offer CRM", source_kind: "CURRENT_KNOWLEDGE" },
+  { source_id: "org-policy", display_name: "Organizational policy registry", source_kind: "ORGANIZATIONAL_KNOWLEDGE" },
+  { source_id: "procurement-catalog", display_name: "Procurement and response catalog", source_kind: "ORGANIZATIONAL_KNOWLEDGE" },
+  { source_id: "knowledge-inbox", display_name: "Operations knowledge inbox", source_kind: "ORGANIZATIONAL_KNOWLEDGE" },
+];
 
 function offlineAssistantAnswer(
   messages: OperationsAssistantMessage[],
@@ -454,7 +491,7 @@ function offlineAssistantAnswer(
   const answer = value.includes("which record") && conflicts.length
     ? `These decision-critical records conflict: ${conflicts.map((item) => `${item.field_label}: ${item.observed_values.join(" versus ")} in ${item.sources.join(", ")}`).join("; ")}.`
     : value.includes("information") || value.includes("checked") || value.includes("source")
-    ? `I checked ${workItem.source_count} active evidence records plus the frozen inventory, inbound, policy, capacity, and action-catalog snapshots for this case. Open the response to see every source and assumption.`
+    ? `I checked ${workItem.source_count} case records using the connected inventory, delivery, policy, capacity, and response information. Open “Information checked” to see where it came from.`
     : recommendation
       ? value.match(/what should|recommend|urgent|attention/)
         ? `The agent-matched response to review is ${recommendation.title}. ${recommendation.effect}`

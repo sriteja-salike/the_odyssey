@@ -116,6 +116,11 @@ export interface WorkItem {
   urgency: "NOW" | "SOON" | "ROUTINE";
   due_label: string | null;
   source_count: number;
+  connected_sources?: {
+    source_id: string;
+    display_name: string;
+    source_kind: string;
+  }[];
   presentation: DecisionPresentation;
   primary_action_label: string;
   synthetic: true;

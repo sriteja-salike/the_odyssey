@@ -28,6 +28,7 @@ const item: WorkItem = {
   urgency: "NOW",
   due_label: null,
   source_count: 7,
+  connected_sources: [{ source_id: "receiving-erp", display_name: "Receiving and inbound ERP", source_kind: "CURRENT_KNOWLEDGE" }],
   presentation: buildDecisionPresentation("E"),
   primary_action_label: "Review blocking records",
   synthetic: true,
@@ -81,7 +82,12 @@ describe("operations agent conversation", () => {
     );
 
     expect(await screen.findByText("I found a decision-critical record conflict.")).toBeInTheDocument();
-    expect(screen.getByText("Live anthropic agent · verified output")).toBeInTheDocument();
+    expect(screen.getByText("Decision agent completed its review")).toBeInTheDocument();
+    expect(screen.getByText("What ShareStack did")).toBeInTheDocument();
+    expect(screen.getByText("7 case records across 1 connected operational system")).toBeInTheDocument();
+    expect(screen.getByText("Discussing")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: item.presentation.issue.title })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "New conversation" })).toBeInTheDocument();
     const input = screen.getByRole("textbox", { name: "Ask about operations" });
     await userEvent.setup().type(input, "Which records differ?");
     await userEvent.setup().click(screen.getByRole("button", { name: "Send message" }));
@@ -116,4 +122,19 @@ describe("operations agent conversation", () => {
     expect(await screen.findByText("The records still need correction.")).toBeInTheDocument();
     expect(mocks.askOperationsAssistant).not.toHaveBeenCalled();
   });
+
+  it("clears the matched scenario when starting a new conversation", async () => {
+    const saved = response("The records still need correction.");
+    sessionStorage.setItem("nourishops:operations-assistant-session", JSON.stringify({
+      messages: [{ role: "assistant", content: [{ type: "text", text: saved.answer }] }],
+      response: saved,
+    }));
+    render(<MemoryRouter initialEntries={["/assistant"]}><Routes><Route path="/assistant" element={<OperationsAssistant />} /></Routes></MemoryRouter>);
+
+    await userEvent.setup().click(await screen.findByRole("button", { name: "New conversation" }));
+    expect(await screen.findByText(WELCOME_TEXT)).toBeInTheDocument();
+    expect(screen.queryByText("Discussing")).not.toBeInTheDocument();
+  });
 });
+
+const WELCOME_TEXT = "Tell me what changed or ask what needs attention. I’ll match your question to verified operations data, explain the decision, and keep approval with you.";

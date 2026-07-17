@@ -41,8 +41,8 @@ describe("core decision flow", () => {
     expect(screen.getByRole("button", { name: "Review and approve" })).toBeDisabled();
     await user.type(screen.getByRole("textbox", { name: /Reason for choosing another response/ }), "Supplier cannot meet the recommended timing.");
     await user.click(screen.getByRole("button", { name: "Review and approve" }));
-    expect(screen.getByRole("dialog", { name: "Apply this action to the simulation?" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Approve simulated action" })).toHaveFocus();
+    expect(screen.getByRole("dialog", { name: "Approve this action?" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Approve action" })).toHaveFocus();
     await user.keyboard("{Enter}");
     expect(onDecision).toHaveBeenCalledWith(expect.objectContaining({ kind: "edit-approve", reason: "Supplier cannot meet the recommended timing." }));
   });

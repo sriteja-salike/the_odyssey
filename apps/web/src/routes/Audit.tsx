@@ -14,7 +14,6 @@ import type { AuditEvent } from "../types/golden";
 import {
   getEvents,
   type DecisionTrace,
-  type DecisionTraceStage,
   type LiveEvent,
 } from "../lib/liveApi";
 
@@ -61,19 +60,19 @@ export default function Audit() {
     <AppFrame runId={runId} letter={letter} active="audit">
       <div className="stack route-stack audit-page">
         <section className="page-lead">
-          <p className="eyebrow">Run governance · append-only</p>
-          <h1 className="risk-title">Audit record</h1>
-          <p className="lead">Inspect the verified stages, pinned versions, and chronological events behind this decision.</p>
+          <p className="eyebrow">Decision record</p>
+          <h1 className="risk-title">How this decision was prepared</h1>
+          <p className="lead">See what ShareStack checked, how the recommendation was reviewed, and where human control was protected.</p>
         </section>
 
         <section className="card version-card">
-          <div className="section-heading"><div><p className="eyebrow">Reproducibility</p><h2>Frozen versions</h2></div><Tag type="cool-gray" size="sm">Pinned at run creation</Tag></div>
+          <div className="section-heading"><div><p className="eyebrow">Decision snapshot</p><h2>Information preserved with this review</h2></div><Tag type="cool-gray" size="sm">Saved when review began</Tag></div>
           <div className="versions">
-            <span>Schema <b>{v.schema_version}</b></span>
-            <span>Data <b>{v.data_version}</b></span>
-            <span>Scenario <b>{v.scenario_version}</b></span>
-            <span>Golden <b>{v.golden_version}</b></span>
-            <span>Clock <b>{v.fixed_clock_utc}</b></span>
+            <span>Decision format <b>{v.schema_version}</b></span>
+            <span>Operations data <b>{v.data_version}</b></span>
+            <span>Situation details <b>{v.scenario_version}</b></span>
+            <span>Expected result <b>{v.golden_version}</b></span>
+            <span>Review time <b>{v.fixed_clock_utc}</b></span>
           </div>
         </section>
 
@@ -81,9 +80,9 @@ export default function Audit() {
           <section className="card trace-card">
             <div className="process-head">
               <div>
-                <p className="eyebrow">Agent transparency</p>
-                <h2 className="sec">{trace.final_status === "ABSTAINED" ? "How this safe stop was produced" : "How this recommendation was produced"}</h2>
-                <p className="hint">Verified stage records and timings—not private chain-of-thought.</p>
+                <p className="eyebrow">ShareStack’s work</p>
+                <h2 className="sec">{trace.final_status === "ABSTAINED" ? "Why ShareStack stopped safely" : "From connected information to recommendation"}</h2>
+                <p className="hint">A plain-language record of the checks that were completed.</p>
               </div>
               <Tag type="green" size="sm">{trace.final_status}</Tag>
             </div>
@@ -93,14 +92,12 @@ export default function Audit() {
                   <span className="decision-process__number">{index + 1}</span>
                   <div>
                     <div className="decision-process__title">
-                      <strong>{humanize(stage.stage)}</strong>
-                      <span>{humanize(stage.actor)}</span>
+                      <strong>{stageLabel(stage.stage)}</strong>
+                      <span>{stageOwner(stage.stage)}</span>
                     </div>
                     <p>{stage.summary}</p>
                     <div className="decision-process__meta">
-                      <span>{stage.status === "FALLBACK" ? "Safe fallback" : titleCase(stage.status)}</span>
-                      <span>{stage.duration_ms} ms</span>
-                      {stageRuntime(stage) && <span>{stageRuntime(stage)}</span>}
+                      <span>{stage.status === "FALLBACK" ? "Verified backup completed" : stage.status === "SKIPPED" ? "Not needed" : "Completed"}</span>
                     </div>
                   </div>
                 </li>
@@ -110,11 +107,11 @@ export default function Audit() {
         )}
 
         <section className="card audit-events-card">
-          <div className="section-heading"><div><p className="eyebrow">Chronology</p><h2>Append-only event stream</h2></div>{events.length > 0 && <Tag type="blue" size="sm">{events.length} events</Tag>}</div>
+          <div className="section-heading"><div><p className="eyebrow">Detailed history</p><h2>What happened, in order</h2></div>{events.length > 0 && <Tag type="blue" size="sm">{events.length} recorded steps</Tag>}</div>
           {error ? (
             <p className="field__err" role="alert">{error}</p>
           ) : liveEvents === null ? (
-            <InlineLoading description="Loading the append-only event stream…" />
+            <InlineLoading description="Loading the decision history…" />
           ) : events.length === 0 ? (
             <p>No events have been recorded for this run.</p>
           ) : (
@@ -128,7 +125,6 @@ export default function Audit() {
                       <span className="audit-event__title">
                         <span className="audit-event__sequence">{String(event.sequence).padStart(2, "0")}</span>
                         <strong>{EVENT_LABEL[event.event_type] ?? humanize(event.event_type)}</strong>
-                        <span className="srcid">{event.semantic_id}</span>
                       </span>
                     )}
                   >
@@ -152,18 +148,24 @@ function humanize(value: string): string {
   return value.toLowerCase().split("_").map(titleCase).join(" ");
 }
 
-function stageRuntime(stage: DecisionTraceStage): string | null {
-  if (stage.status === "SKIPPED") return null;
-  const mode = stage.details.effective_mode;
-  const provider = stage.details.provider;
-  const model = stage.details.model;
-  const solver = stage.details.solver_id;
-  if (typeof mode === "string") {
-    return [humanize(mode), provider, model]
-      .filter((value): value is string => typeof value === "string" && value.length > 0)
-      .join(" · ");
-  }
-  return typeof solver === "string" ? solver : null;
+function stageLabel(stage: string): string {
+  return ({
+    CONTEXT_FROZEN: "Connected information gathered",
+    DETERMINISTIC_SOLVER: "Available responses and limits checked",
+    DECISION_ORCHESTRATOR: "Recommendation prepared and explained",
+    INDEPENDENT_REVIEWER: "Independent safety review completed",
+    AUTHORITY_VALIDATOR: "Human approval protected",
+  } as Record<string, string>)[stage] ?? humanize(stage);
+}
+
+function stageOwner(stage: string): string {
+  return ({
+    CONTEXT_FROZEN: "Connected records",
+    DETERMINISTIC_SOLVER: "Decision checks",
+    DECISION_ORCHESTRATOR: "Decision agent",
+    INDEPENDENT_REVIEWER: "Safety reviewer",
+    AUTHORITY_VALIDATOR: "Approval guardrail",
+  } as Record<string, string>)[stage] ?? "ShareStack";
 }
 
 /** Per-event inputs/outputs derived from the golden. */
@@ -179,7 +181,7 @@ function eventDetail(e: AuditEvent, letter: Parameters<typeof getGolden>[0]): [s
     case "RUN_CREATED":
       return [["Scenario", overlay.display_name], ["Scenario ID", e.semantic_id], ["Mode", "Offline verified"]];
     case "SCENARIO_VALIDATED":
-      return [["Data version", e.semantic_id], ["Result", "Fixtures validated against schema"]];
+      return [["Information version", e.semantic_id], ["Result", "Information format checked"]];
     case "NOTICE_EXTRACTED":
       return [
         ["Source notice", e.semantic_id],

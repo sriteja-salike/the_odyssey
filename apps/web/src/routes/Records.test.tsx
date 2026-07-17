@@ -10,7 +10,10 @@ import Records from "./Records";
 
 const mocks = vi.hoisted(() => ({ getRun: vi.fn() }));
 
-vi.mock("../lib/liveApi", () => ({ getRun: mocks.getRun }));
+vi.mock("../lib/liveApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/liveApi")>()),
+  getRun: mocks.getRun,
+}));
 
 beforeEach(() => {
   sessionStorage.clear();
@@ -51,9 +54,29 @@ describe("records landing", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText("Approved in simulation")).toBeInTheDocument();
+    expect(await screen.findByText("Approved")).toBeInTheDocument();
     expect(screen.getByText("Manager approval recorded")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open audit record" })).toHaveAttribute("href", "/runs/run_scn-a_records/audit");
+    expect(screen.getByRole("link", { name: "See how it was prepared" })).toHaveAttribute("href", "/runs/run_scn-a_records/audit");
     expect(screen.getByRole("link", { name: "Compare responses" })).toHaveAttribute("href", "/runs/run_scn-a_records/compare");
+  });
+
+  it("lists earlier decisions from the same browser session", async () => {
+    sessionStorage.setItem("nourishops:recent-runs", JSON.stringify([
+      { run_id: "run_scn-e_latest", scenario_key: "scenario_e", state: "ABSTAINED", updated_at: "2026-07-17T12:00:00Z" },
+      { run_id: "run_scn-a_earlier", scenario_key: "scenario_a", state: "APPROVED", updated_at: "2026-07-17T11:00:00Z" },
+    ]));
+    mocks.getRun.mockImplementation(async (runId: string) => ({
+      run_id: runId,
+      state: runId.includes("scn-e") ? "ABSTAINED" : "APPROVED",
+      decision: runId.includes("scn-e") ? null : { kind: "approve" },
+      execution: null,
+      decision_brief: { presentation: buildDecisionPresentation(runId.includes("scn-e") ? "E" : "A") },
+    } as unknown as LiveRun));
+
+    render(<MemoryRouter initialEntries={["/records"]}><Routes><Route path="/records" element={<Records />} /></Routes></MemoryRouter>);
+
+    expect(await screen.findByRole("heading", { name: "Earlier decisions" })).toBeInTheDocument();
+    expect(screen.getByText("1 more in this session")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open" })).toHaveAttribute("href", "/runs/run_scn-a_earlier");
   });
 });

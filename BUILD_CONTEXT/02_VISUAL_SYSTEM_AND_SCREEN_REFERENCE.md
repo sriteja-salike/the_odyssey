@@ -182,7 +182,7 @@ Regardless of selected direction, the 1440 × 1024 review reference must show wi
 - conservative projected coverage and threshold;
 - compact four-week projection;
 - recommended action, quantity, arrival, cost, and expected effect;
-- `Approve simulated action` as the sole primary button;
+- `Approve action` as the sole primary button;
 - access to alternatives and evidence without making them compete with the decision.
 
 Total pounds, storage summary, and general category metrics remain supporting context.

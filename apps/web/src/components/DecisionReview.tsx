@@ -21,6 +21,7 @@ import type { Decision, RunState } from "../lib/runState";
 import { dateShort, lb, titleCase, usd } from "../lib/format";
 import DecisionVisual from "./DecisionVisual";
 import Dialog from "./Dialog";
+import ConnectedSources from "./ConnectedSources";
 
 type DialogKind = null | "approve" | "reject" | "defer" | "edit";
 
@@ -130,7 +131,7 @@ export default function DecisionReview({ runId, state, setState, brief, knowledg
               {nonDefault && <Tag type="purple" size="sm">Manager-selected response</Tag>}
               <dl className="choice-facts">
                 <div><dt>Quantity</dt><dd>{lb(state.selection?.quantityLb ?? selected.requested_quantity_lb)}</dd></div>
-                <div><dt>Simulated cost</dt><dd>{usd(selectedCost)}</dd></div>
+                <div><dt>Estimated cost</dt><dd>{usd(selectedCost)}</dd></div>
                 {timing && <div><dt>Timing</dt><dd>{timing}</dd></div>}
               </dl>
               <p className="choice-effect"><CheckmarkFilled size={20} aria-hidden /> {selectedEffect}</p>
@@ -140,8 +141,9 @@ export default function DecisionReview({ runId, state, setState, brief, knowledg
 
               <div className="agent-verification" aria-label="Recommendation verification">
                 <span><CheckmarkFilled size={16} aria-hidden />{brief.evidence.length} verified records checked</span>
-                <span><CheckmarkFilled size={16} aria-hidden />Safety constraints passed</span>
-                <span><Locked size={16} aria-hidden />Manager approval required</span>
+                <span><CheckmarkFilled size={16} aria-hidden />{brief.alternatives.length + brief.rejected_options.length + 1} responses compared</span>
+                <span><CheckmarkFilled size={16} aria-hidden />Operational limits checked</span>
+                <span><Locked size={16} aria-hidden />Your approval required</span>
               </div>
 
               {nonDefault && (
@@ -200,22 +202,28 @@ export default function DecisionReview({ runId, state, setState, brief, knowledg
               </div>
             </details>
 
+            {knowledge && (
+              <ConnectedSources
+                sources={[...knowledge.current, ...knowledge.organizational]}
+                recordCount={brief.evidence.length}
+                label="What information was checked?"
+              />
+            )}
+
             <details className="plain-disclosure">
-              <summary>More details</summary>
+              <summary>Decision details</summary>
               <div className="disclosure-content technical-details">
                 <dl>
-                  <div><dt>Confidence</dt><dd>{titleCase(recommended.confidence_label)}</dd></div>
-                  <div><dt>Decision agent</dt><dd>{agentStatusLabel(brief.agent)}{brief.agent.provider ? ` · ${brief.agent.provider}` : ""}</dd></div>
-                  <div><dt>Agent tool</dt><dd>{brief.agent.tool_calls.length ? brief.agent.tool_calls.join(", ") : "Verified local package reader"}</dd></div>
-                  <div><dt>Safety checks</dt><dd>Feasible · human approval required · simulation only</dd></div>
-                  <div><dt>Source records</dt><dd>{recommended.action.evidence_ids.join(", ") || "See audit record"}</dd></div>
+                  <div><dt>Recommendation confidence</dt><dd>{titleCase(recommended.confidence_label)}</dd></div>
+                  <div><dt>Prepared by</dt><dd>{agentStatusLabel(brief.agent)}</dd></div>
+                  <div><dt>Safety review</dt><dd>The response fits the current inventory, capacity, budget, timing, and approval rules.</dd></div>
+                  <div><dt>Human control</dt><dd>Nothing proceeds unless a manager approves it.</dd></div>
                 </dl>
                 {brief.rejected_options.length > 0 && (
                   <div><strong>Responses that did not pass</strong><ul>{brief.rejected_options.map((option) => <li key={option.evaluated_action_id}>{option.display_name}: {option.failed_constraints.map(humanize).join(", ")}</li>)}</ul></div>
                 )}
-                <div><strong>Evidence used</strong><ul>{brief.evidence.map((item) => <li key={item.evidence_id}>{item.title} <span className="mono">{item.evidence_id}</span></li>)}</ul></div>
-                {knowledge && <p>{knowledge.current.length + knowledge.organizational.length} frozen source snapshots were checked for this run.</p>}
-                <Button as={Link} kind="tertiary" size="sm" to={`/runs/${runId}/audit`}>Open full audit record</Button>
+                <div><strong>Supporting records</strong><ul>{brief.evidence.map((item) => <li key={item.evidence_id}>{item.title}</li>)}</ul></div>
+                <Button as={Link} kind="tertiary" size="sm" to={`/runs/${runId}/audit`}>See how this decision was prepared</Button>
               </div>
             </details>
           </div>
@@ -230,12 +238,12 @@ export default function DecisionReview({ runId, state, setState, brief, knowledg
       <p className="journey-reassurance"><Locked size={16} aria-hidden /> Simulation only — no real order will be placed.</p>
 
       {dialog === "approve" && (
-        <Dialog title="Apply this action to the simulation?" primaryLabel="Approve simulated action" onClose={() => setDialog(null)} onPrimary={() => { setDialog(null); void approve(); }}>
-          <p>This updates only the current synthetic run. It will not place an order, reserve food, contact a donor, or notify another organization.</p>
+        <Dialog title="Approve this action?" primaryLabel="Approve action" onClose={() => setDialog(null)} onPrimary={() => { setDialog(null); void approve(); }}>
+          <p>This records the approved response in ShareStack. It will not place an order, reserve food, contact a donor, or notify another organization.</p>
           <dl className="confirmation-facts">
             <div><dt>Action</dt><dd>{selectedTitle}</dd></div>
             <div><dt>Quantity</dt><dd>{lb(state.selection?.quantityLb ?? selected.requested_quantity_lb)}</dd></div>
-            <div><dt>Simulated cost</dt><dd>{usd(selectedCost)}</dd></div>
+            <div><dt>Estimated cost</dt><dd>{usd(selectedCost)}</dd></div>
             {timing && <div><dt>Timing</dt><dd>{timing}</dd></div>}
             {nonDefault && <div><dt>Manager reason</dt><dd>{reason}</dd></div>}
           </dl>
@@ -317,7 +325,7 @@ function EditDialog({ runId, action, initialQuantity, onClose, onApply }: { runI
       if (!preview.feasible) {
         const codes = preview.evaluation.failed_codes ?? preview.evaluation.failed_constraints ?? [];
         setError(codes.includes("OFFLINE_FROZEN_QUANTITY_ONLY")
-          ? "Offline mode can recheck only the frozen evaluated quantities. Reconnect to test a custom amount."
+          ? "While offline, ShareStack can use only amounts that were already checked. Reconnect to check a custom amount."
           : `This amount does not pass the current safety checks: ${codes.map(humanize).join(", ") || "review the amount"}.`);
         return;
       }

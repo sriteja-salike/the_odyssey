@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { InlineLoading } from "@carbon/react";
 import AppFrame from "../components/AppFrame";
 import DecisionReview from "../components/DecisionReview";
@@ -15,6 +15,7 @@ import { createRun, decideRun, evaluateRun, getRun, getWorkItems, type LiveRun, 
 
 export default function DecisionWorkspace() {
   const { runId = "" } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
   const letter = letterFromRunId(runId);
   const [state, setState] = useRunState(runId);
@@ -22,12 +23,13 @@ export default function DecisionWorkspace() {
   const [workItem, setWorkItem] = useState<WorkItem | undefined>();
   const [error, setError] = useState("");
   const [confirmReset, setConfirmReset] = useState(false);
+  const autoAnalysisStarted = useRef(false);
 
   useEffect(() => {
     if (!letter) return;
-    getRun(runId).then((run) => {
+    Promise.all([getRun(runId), getWorkItems().catch(() => [] as WorkItem[])]).then(([run, items]) => {
       setLiveRun(run);
-      getWorkItems().then((items) => setWorkItem(items.find((item) => item.case_key === run.scenario_key))).catch(() => undefined);
+      setWorkItem(items.find((item) => item.case_key === run.scenario_key));
       const decision = run.decision ? {
         kind: run.decision.kind,
         actionId: run.decision.action_id,
@@ -53,6 +55,14 @@ export default function DecisionWorkspace() {
       setState({ phase: "DRAFT" });
     }
   }, [runId, setState]);
+
+  useEffect(() => {
+    const autoAnalyze = Boolean((location.state as { autoAnalyze?: boolean } | null)?.autoAnalyze);
+    if (!autoAnalyze || !liveRun || liveRun.state !== "DRAFT" || autoAnalysisStarted.current) return;
+    autoAnalysisStarted.current = true;
+    navigate(location.pathname, { replace: true, state: null });
+    void startAnalysis();
+  }, [liveRun, location.pathname, location.state, navigate, startAnalysis]);
 
   async function commitDecision(decision: Decision) {
     setError("");

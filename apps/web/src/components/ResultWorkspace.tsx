@@ -37,13 +37,13 @@ function ApprovedResult({ letter, runId, decision, execution, feedbackRecorded, 
   return (
     <div className="journey-shell result-journey">
       <header className="journey-intro journey-intro--compact result-hero">
-        <Tag type="green" size="sm">Simulation complete</Tag>
-        <h1>Action completed in simulation</h1>
-        <p>{action?.display_name ?? decision.actionId} was recorded for this synthetic run. No external action was taken.</p>
+        <Tag type="green" size="sm">Completed</Tag>
+        <h1>Action completed</h1>
+        <p>{action?.display_name ?? decision.actionId} was recorded. No external action was taken.</p>
       </header>
 
       <ol className="task-list task-list--complete">
-        <CompletedStep number={1} title="Understand the issue" copy="The impact check was completed using the frozen source records." />
+        <CompletedStep number={1} title="Understand the issue" copy="The impact check was completed using the verified operational information." />
         <CompletedStep number={2} title="Choose a response" copy={action?.display_name ?? decision.actionId} />
         <li className="task-step task-step--complete task-step--result">
           <div className="task-step__marker"><CheckmarkFilled size={20} aria-hidden /></div>
@@ -51,7 +51,7 @@ function ApprovedResult({ letter, runId, decision, execution, feedbackRecorded, 
             <div className="task-step__title"><div><span>Step 3</span><h2>Confirm</h2></div><Tag type="green">Complete</Tag></div>
             <dl className="result-summary">
               <div><dt>Quantity</dt><dd>{lb(decision.quantityLb)}</dd></div>
-              <div><dt>Simulated cost</dt><dd>{usd(execution?.cost_usd ?? action?.cost_usd ?? "0")}</dd></div>
+              <div><dt>Estimated cost</dt><dd>{usd(execution?.cost_usd ?? action?.cost_usd ?? "0")}</dd></div>
               <div><dt>External action</dt><dd>Not performed</dd></div>
             </dl>
             {brief && <DecisionVisual presentation={brief.presentation} result compact />}
@@ -85,7 +85,7 @@ function ApprovedResult({ letter, runId, decision, execution, feedbackRecorded, 
       </details>
 
       <div className="result-actions"><Button as={Link} to="/">Return to Today</Button><Button kind="ghost" renderIcon={Renew} onClick={onReset}>Start clean run</Button></div>
-      <p className="journey-reassurance"><Locked size={16} aria-hidden /> Simulation only — no real order was placed.</p>
+      <p className="journey-reassurance"><Locked size={16} aria-hidden /> No external action was taken.</p>
     </div>
   );
 }

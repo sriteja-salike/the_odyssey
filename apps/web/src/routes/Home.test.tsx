@@ -28,6 +28,7 @@ const item: WorkItem = {
   urgency: "SOON",
   due_label: "Review by Aug 10",
   source_count: 7,
+  connected_sources: [{ source_id: "warehouse-wms", display_name: "Warehouse management system", source_kind: "CURRENT_KNOWLEDGE" }],
   presentation: buildDecisionPresentation("A"),
   primary_action_label: "Ask agent to review",
   synthetic: true,
@@ -51,14 +52,16 @@ describe("adaptive operations home", () => {
     );
 
     expect(await screen.findByRole("heading", { name: "Protein coverage may fall below the safe minimum." })).toBeInTheDocument();
-    expect(screen.getByText("Verified issue ready for agent review")).toBeInTheDocument();
+    expect(screen.getByText("Highest-priority decision")).toBeInTheDocument();
+    expect(screen.getByText("Ready to help with today’s decisions")).toBeInTheDocument();
+    expect(screen.getByText("1 connected operational system")).toBeInTheDocument();
     expect(screen.queryByText(/USDA protein shipment delay/i)).not.toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole("button", { name: "Are any deliveries at risk?" }));
     expect(screen.getByText(/Route: \/assistant\?prompt=Are%20any%20deliveries%20at%20risk%3F/)).toBeInTheDocument();
     expect((await axe.run(container, { rules: { "color-contrast": { enabled: false } } })).violations).toEqual([]);
   });
 
-  it("creates and evaluates the matched case without exposing fixture selection", async () => {
+  it("starts the matched case immediately without exposing fixture selection", async () => {
     mocks.getWorkItems.mockResolvedValue([item]);
     mocks.startWorkItem.mockResolvedValue({ run_id: "run_scn-a_test" });
     render(
@@ -73,5 +76,32 @@ describe("adaptive operations home", () => {
     await userEvent.setup().click(await screen.findByRole("button", { name: "Ask agent to review" }));
     await waitFor(() => expect(mocks.startWorkItem).toHaveBeenCalledWith(item));
     expect(screen.getByText("Route: /runs/run_scn-a_test")).toBeInTheDocument();
+  });
+
+  it("shows every situation, prioritizes a blocking conflict, and routes its questions to Ask", async () => {
+    const conflict: WorkItem = {
+      ...item,
+      work_item_id: "SCN-E-TEST",
+      case_key: "scenario_e",
+      state: "INFORMATION_NEEDED",
+      urgency: "NOW",
+      due_label: null,
+      presentation: buildDecisionPresentation("E"),
+      primary_action_label: "Review blocking records",
+    };
+    mocks.getWorkItems.mockResolvedValue([item, conflict]);
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/assistant" element={<Location />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("heading", { name: "The records conflict, so a safe recommendation is not possible." })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Protein coverage may fall below the safe minimum." })).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Ask" }));
+    expect(screen.getByText(/Route: \/assistant\?prompt=/)).toHaveTextContent("Protein%20coverage");
   });
 });

@@ -40,7 +40,7 @@ The product starts at `/`, not inside a remembered scenario. Home is an adaptive
 
 The assistant may answer a verified-data question and route Jordan into the matching decision workflow. It may not approve, silently mutate a run, invent a case, or replace the structured review and confirmation steps. Chat is therefore a supporting lane, not the application shell and not the only way to work.
 
-Home uses operational titles such as `Protein coverage may fall below the safe minimum.` Scenario letters, fixture names, partner aliases, and demo memory tests never appear as the task label. `Continue to next item` advances the briefing without adding a card grid or queue dashboard.
+Home uses operational titles such as `Protein coverage may fall below the safe minimum.` Scenario letters, fixture names, partner aliases, and demo memory tests never appear as the task label. The most urgent unresolved item receives the focused briefing; every other verified situation remains visible in a compact list with `Ask` and decision actions. Completed items move below unresolved work.
 
 ### 0.1.2 Agent-first decision contract
 
@@ -50,7 +50,7 @@ The UI distinguishes three things Jordan should never have to infer:
 2. **Agent recommendation:** after evaluation, the ShareStack Decision Agent turns the verified candidate package into the recommendation Jordan reviews. The surface names the effective agent mode, verified record count, safety check, and human-approval boundary.
 3. **Human decision:** approval, edit, reject, and defer remain explicit manager actions. The agent cannot submit them or perform an external action.
 
-The Ask route uses the open-source assistant-ui thread/composer pattern. Every request sends up to the last twelve user/assistant messages plus the current matched work item. The typed operations-agent result is one of `ANSWER`, `CLARIFY`, `DECISION`, or `SAFE_STOP`; it may select only a verified work-item ID. The backend, not the model, renders operational facts from the matched presentation contract. An unrelated or ambiguous request returns `CLARIFY` with no silently selected scenario. The conversation and matched work item survive a browser refresh within the tab.
+The Ask route uses the open-source assistant-ui thread/composer pattern. Every request sends up to the last twelve user/assistant messages plus the current matched work item. The typed operations-agent result is one of `ANSWER`, `CLARIFY`, `DECISION`, or `SAFE_STOP`; it may select only a verified work-item ID. The backend, not the model, renders operational facts from the matched presentation contract. An unrelated or ambiguous request returns `CLARIFY` with no silently selected scenario. The conversation and matched work item survive a browser refresh within the tab. The active issue is labeled `Discussing`, with explicit `New conversation` and `Return to decision` controls.
 
 Live-provider output is labeled `Live agent · verified`. Provider failure produces the same work path through a visible `Verified fallback`; it never changes quantities, rankings, constraints, or approval authority. Scenario E is an agent-matched safe stop followed by a policy lock, with a direct `Ask agent how to resolve this` recovery path and no approval control.
 
@@ -63,8 +63,8 @@ The UI derives the active step from the backend run state; it does not persist a
 | `DRAFT` | Step 1 `Understand the issue` is active; `Check impact` is the sole primary action. |
 | Request-local `ANALYZING` | Remain in Step 1 with calm progress copy; technical stages are disclosed on demand. |
 | `READY_FOR_REVIEW` | Step 1 is complete, Step 2 `Choose a response` is active, and Step 3 `Confirm` is pending. |
-| Approval dialog | Repeats action, quantity, cost, timing, manager reason when applicable, and the simulation consequence. Final action is `Approve simulated action`. |
-| `APPROVED` | All steps are complete; lead with `Action completed in simulation`, one before/after visual, and `No external action was taken.` |
+| Approval dialog | Repeats action, quantity, cost, timing, manager reason when applicable, and the no-external-action consequence. Final action is `Approve action`. |
+| `APPROVED` | All steps are complete; lead with `Action completed`, one before/after visual, and `No external action was taken.` |
 | `REJECTED` / `DEFERRED` | Record the decision and unchanged risk without success styling. |
 | `ABSTAINED` | Step 1 is complete, Step 2 is blocked, Step 3 is unavailable, and no approval control renders. |
 
@@ -81,7 +81,7 @@ The active recommendation shows only the action, quantity, simulated cost, timin
 
 ### 0.4 Shell and navigation
 
-The Phase 1 shell contains `ShareStack`, `Home`, `Ask`, `Records`, and an overflow menu. Home owns the adaptive briefing; Ask opens the focused assistant; Records is always available and shows the latest browser-session decision with links to its Audit/Compare surfaces. Demo fixtures are developer controls under overflow and are never the primary navigation model. Run ID, connection mode, source IDs, versions, and technical context live under `Decision details` or Records. Existing run route URLs remain unchanged.
+The Phase 1 shell contains `ShareStack`, `Home`, `Ask`, `Records`, and a current `Decision` context when a reviewed run exists. Home owns the adaptive briefing; Ask opens the focused assistant; Records is always available and shows all evaluated runs from the current browser session with links to their Audit/Compare surfaces. Demo fixtures are developer controls under overflow and are never the primary navigation model. Run ID, connection mode, source IDs, versions, and technical context live under `Decision details` or Records. Existing run route URLs remain unchanged.
 
 ### 0.5 Scenario explanation contract
 
@@ -160,7 +160,7 @@ The operator must be able to answer these questions without reading generated pr
 3. **Total pounds remain secondary.** Category coverage and the active risk receive stronger hierarchy.
 4. **The conservative view is the decision default.** Expected supply is visible as a comparison, never silently substituted.
 5. **AI activity is inspectable.** Show completed tool stages and their outputs, not hidden reasoning or theatrical “thinking.”
-6. **Every consequential transition is explicit.** Approval always names the action and states that it is simulated.
+6. **Every consequential transition is explicit.** Approval always names the action and states that no order, outreach, reservation, or notification will occur.
 7. **No result without provenance.** Metrics and claims link to fixture, policy, inbound, action, or engine-version records.
 8. **Failure is a designed state.** Missing data, no feasible action, stale analysis, and model failure are first-class experiences.
 9. **Calm over clever.** Operational readability, restrained status color, and stable layout matter more than visual novelty.
@@ -333,17 +333,17 @@ The only editable field is quantity.
 
 ### 4.6 Approve
 
-The primary control reads `Approve simulated action`.
+The primary control reads `Approve action`.
 
 Confirmation title:
 
-> Apply this action to the simulation?
+> Approve this action?
 
 Confirmation body:
 
 > This updates only the current synthetic run. It will not place an order, reserve food, contact a donor, or notify another organization.
 
-The confirmation also repeats the exact selected action ID, quantity, cost, and arrival. When the manager chose a non-top alternative or edited quantity, it shows the entered reason under `Manager reason`. The primary confirmation control remains `Approve simulated action`; the secondary control is `Cancel`.
+The confirmation also repeats the exact selected action ID, quantity, cost, and arrival. When the manager chose a non-top alternative or edited quantity, it shows the entered reason under `Manager reason`. The primary confirmation control remains `Approve action`; the secondary control is `Cancel`.
 
 After confirmation:
 
@@ -431,7 +431,7 @@ stateDiagram-v2
 |---|---|---|
 | `DRAFT` | Immutable fixture loaded; disruption not analyzed | Analyze disruption |
 | `ANALYZING` | Transient browser/request state while parsing and deterministic tools run; never restored as a committed state | None; prevent duplicate submission |
-| `READY_FOR_REVIEW` | Valid recommendation and alternatives exist | Approve simulated action |
+| `READY_FOR_REVIEW` | Valid recommendation and alternatives exist | Approve action |
 | `NO_ACTION_REQUIRED` | Analysis found no actionable risk in the four-week horizon | Start clean run |
 | `STALE` | Input/rule version changed after analysis | Re-run analysis |
 | `APPROVED` | Simulated action applied to this run | View comparison |
@@ -485,7 +485,7 @@ Above the fold:
 - breach date and conservative coverage;
 - compact four-week projection;
 - selected recommendation with quantity, timing, cost, and expected effect;
-- `Approve simulated action`.
+- `Approve action`.
 
 Supporting information may sit below or in contextual panels:
 
@@ -594,7 +594,7 @@ Use one chronological event surface, not individual cards per event. Each row mu
 | Rejected options | `Not feasible in this scenario` |
 | Evidence section | `Why this is at risk` |
 | Tool summary | `What the agent checked` |
-| Approval | `Approve simulated action` |
+| Approval | `Approve action` |
 | Quantity edit | `Edit quantity` |
 | Reset | `Start clean run` |
 | Result success | `Simulation updated` |

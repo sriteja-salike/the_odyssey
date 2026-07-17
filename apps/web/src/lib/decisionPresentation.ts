@@ -96,7 +96,7 @@ export function buildDecisionPresentation(letter: ScenarioLetter, brief?: Decisi
       issue: { label: "Needs attention", title: `${titleCase(category)} coverage may fall below the safe minimum.`, summary },
       recommendation,
       visual: visual("coverage", `Four-week ${category} coverage`, summary, "weeks", data, minimum, `Minimum ${Number(minimum).toFixed(1)} weeks`),
-      result_visual: visual("coverage", "What the simulation changed", effect, "weeks", [datum("Before", before, "weeks", "attention"), datum("After", after, "weeks", "positive")], minimum, `Minimum ${Number(minimum).toFixed(1)} weeks`),
+      result_visual: visual("coverage", "Expected operational effect", effect, "weeks", [datum("Before", before, "weeks", "attention"), datum("After", after, "weeks", "positive")], minimum, `Minimum ${Number(minimum).toFixed(1)} weeks`),
       detail_facts: [{ label: "Expected breach", value: dateShort(risk.first_breach_week_start) }, { label: "Target coverage", value: `${Number(target).toFixed(1)} weeks` }],
     };
   }
@@ -114,7 +114,7 @@ export function buildDecisionPresentation(letter: ScenarioLetter, brief?: Decisi
       issue: { label: "Needs attention", title: "The full produce offer will not fit in refrigerated storage.", summary },
       recommendation,
       visual: visual("capacity", "Refrigerated storage", summary, "lb", [datum("Accept all", peak, "lb", "attention"), datum("Capacity", capacity, "lb"), datum("Recommended", recommendedPeak, "lb", "positive")], String(capacity), `Capacity ${lb(capacity)}`),
-      result_visual: visual("capacity", "What the simulation changed", effect, "lb", [datum("Accept all", peak, "lb", "attention"), datum("Approved", recommendedPeak, "lb", "positive")], String(capacity), `Capacity ${lb(capacity)}`),
+      result_visual: visual("capacity", "Expected operational effect", effect, "lb", [datum("Accept all", peak, "lb", "attention"), datum("Approved", recommendedPeak, "lb", "positive")], String(capacity), `Capacity ${lb(capacity)}`),
       detail_facts: [{ label: "Potential spoilage", value: lb(risk.full_accept_expiry_spoilage_lb) }, { label: "Storage limit", value: lb(capacity) }],
       suggested_questions: ["Why not accept the full offer?", "What information was checked?", "What other responses are feasible?"],
     };
@@ -132,7 +132,7 @@ export function buildDecisionPresentation(letter: ScenarioLetter, brief?: Decisi
       issue: { label: "Needs attention", title: "This donation is not the best fit for local needs.", summary },
       recommendation,
       visual: visual("mismatch", "Offer compared with local need", summary, "lb", [datum("Offered", offered, "lb", "attention"), datum("Local target", target, "lb"), datum("Useful redirect", redirected, "lb", "positive")]),
-      result_visual: visual("mismatch", "What the simulation changed", effect, "lb", [datum("Offered", offered, "lb", "attention"), datum("Redirected", redirected, "lb", "positive")]),
+      result_visual: visual("mismatch", "Expected operational effect", effect, "lb", [datum("Offered", offered, "lb", "attention"), datum("Redirected", redirected, "lb", "positive")]),
       detail_facts: [{ label: "Offer", value: lb(offered) }, { label: "Local target", value: lb(target) }],
       suggested_questions: ["Why is a redirect better?", "Which local needs were considered?", "What other responses are feasible?"],
     };
@@ -152,7 +152,7 @@ export function buildDecisionPresentation(letter: ScenarioLetter, brief?: Decisi
       issue: { label: "Needs attention", title: "The current budget cannot cover both shortages.", summary },
       recommendation,
       visual: visual("budget", "Budget tradeoff", summary, "usd", [datum("Available", available, "usd"), datum("Both needs", combined, "usd", "attention"), datum("Recommended", cost, "usd", "positive")], String(available), `Available ${usd(available)}`),
-      result_visual: visual("budget", "What the simulation changed", effect, "usd", [datum("Available", available, "usd"), datum("Approved", cost, "usd", "positive"), datum("Remaining", remaining, "usd")], String(available), `Available ${usd(available)}`),
+      result_visual: visual("budget", "Expected operational effect", effect, "usd", [datum("Available", available, "usd"), datum("Approved", cost, "usd", "positive"), datum("Remaining", remaining, "usd")], String(available), `Available ${usd(available)}`),
       detail_facts: [{ label: "Available budget", value: usd(available) }, { label: "Combined need", value: usd(combined) }, { label: "Remaining after response", value: usd(remaining) }],
       suggested_questions: ["Why address this shortage first?", "What risk remains open?", "What other responses are feasible?"],
     };

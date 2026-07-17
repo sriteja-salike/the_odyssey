@@ -49,7 +49,7 @@ export default function Compare() {
         <section className="page-lead">
           <p className="eyebrow">Scenario A · policy comparison</p>
           <h1 className="risk-title">Compare response policies</h1>
-          <p className="lead">Three policies, one frozen starting state. Review the operational trade-offs without changing the approved plan.</p>
+          <p className="lead">Three responses, using the same starting information. Review the operational trade-offs without changing the approved plan.</p>
         </section>
 
         {managerPlan && (
@@ -65,7 +65,7 @@ export default function Compare() {
         {!available ? (
           <section className="card">
             <h2 className="sec">Comparison unavailable</h2>
-            <p>Analyze the disruption first; comparison is unlocked only after the same source snapshot has been evaluated.</p>
+            <p>Check the disruption first; comparison becomes available after the same operational information has been reviewed.</p>
           </section>
         ) : (
           <section className="comparison-table">

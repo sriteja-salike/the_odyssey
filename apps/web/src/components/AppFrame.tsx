@@ -9,14 +9,15 @@ import {
   HeaderNavigation,
   OverflowMenu,
   OverflowMenuItem,
+  Select,
+  SelectItem,
   Tag,
 } from "@carbon/react";
 import { Information, OverflowMenuVertical, WarningAlt } from "@carbon/icons-react";
-import { getOverlay, type ScenarioLetter } from "../lib/api";
+import { SCENARIOS, getOverlay, type ScenarioLetter } from "../lib/api";
 import { createRun, getConnectionMode, subscribeConnectivity } from "../lib/liveApi";
 import { date } from "../lib/format";
 import Dialog from "./Dialog";
-import ScenarioMenu from "./ScenarioMenu";
 
 const SIM_NOTICE =
   "Simulation only — All organizations, records, quantities, costs, and outcomes in this prototype are synthetic.";
@@ -33,6 +34,8 @@ export default function AppFrame({ runId, letter, active, onStartClean, children
   const navigate = useNavigate();
   const overlay = getOverlay(letter);
   const [resetOpen, setResetOpen] = useState(false);
+  const [scenarioOpen, setScenarioOpen] = useState(false);
+  const [pendingScenario, setPendingScenario] = useState<ScenarioLetter>(letter);
   const [working, setWorking] = useState(false);
   const connectionMode = useSyncExternalStore(subscribeConnectivity, getConnectionMode, getConnectionMode);
   const offline = connectionMode === "OFFLINE_DEMO";
@@ -55,30 +58,46 @@ export default function AppFrame({ runId, letter, active, onStartClean, children
     }
   }
 
+  async function switchScenario() {
+    setWorking(true);
+    try {
+      const run = await createRun(pendingScenario, runId);
+      setScenarioOpen(false);
+      navigate(`/runs/${run.run_id}`);
+    } finally {
+      setWorking(false);
+    }
+  }
+
   return (
     <div className="app-shell">
       <Header aria-label="ShareStack" className="app-header">
         <HeaderName as={NavLink} to="/" prefix="">ShareStack</HeaderName>
         <HeaderNavigation aria-label="Primary navigation">
           <HeaderMenuItem as={NavLink} to="/">Home</HeaderMenuItem>
-          <HeaderMenuItem as={NavLink} to={`/runs/${runId}`} end isActive={active === "decision"}>Current decision</HeaderMenuItem>
+          <HeaderMenuItem as={NavLink} to="/assistant">Ask</HeaderMenuItem>
+          <HeaderMenuItem as={NavLink} to="/records">Records</HeaderMenuItem>
           <HeaderMenu
-            aria-label="Records"
-            menuLinkName="Records"
-            isActive={active === "compare" || active === "audit"}
+            aria-label="Current decision"
+            menuLinkName="Decision"
+            isActive={active === "decision" || active === "compare" || active === "audit"}
           >
+            <HeaderMenuItem as={NavLink} to={`/runs/${runId}`}>Current decision</HeaderMenuItem>
             {letter === "A" && <HeaderMenuItem as={NavLink} to={`/runs/${runId}/compare`}>Compare this decision</HeaderMenuItem>}
             <HeaderMenuItem as={NavLink} to={`/runs/${runId}/audit`}>Audit record</HeaderMenuItem>
           </HeaderMenu>
         </HeaderNavigation>
         <HeaderGlobalBar>
-          <ScenarioMenu className="scenario-menu--header" />
           <OverflowMenu
             aria-label="Decision options"
             renderIcon={OverflowMenuVertical}
             flipped
             className="header-overflow"
           >
+            <OverflowMenuItem itemText="Switch demo situation" onClick={() => {
+              setPendingScenario(letter);
+              setScenarioOpen(true);
+            }} />
             <OverflowMenuItem itemText="Start clean run" onClick={() => setResetOpen(true)} />
           </OverflowMenu>
         </HeaderGlobalBar>
@@ -86,9 +105,9 @@ export default function AppFrame({ runId, letter, active, onStartClean, children
 
       <nav className="mobile-primary-nav" aria-label="Primary navigation">
         <NavLink to="/">Home</NavLink>
+        <NavLink to="/assistant">Ask</NavLink>
+        <NavLink to="/records">Records</NavLink>
         <NavLink to={`/runs/${runId}`} end>Decision</NavLink>
-        {letter === "A" && <NavLink className="mobile-compare-link" to={`/runs/${runId}/compare`}>Compare</NavLink>}
-        <NavLink to={`/runs/${runId}/audit`}>Audit</NavLink>
       </nav>
 
       <div className="simulation-note" role="note">
@@ -117,6 +136,26 @@ export default function AppFrame({ runId, letter, active, onStartClean, children
           onClose={() => setResetOpen(false)}
         >
           <p>Start again from the original synthetic fixture. This run and its complete audit record will remain unchanged.</p>
+        </Dialog>
+      )}
+
+      {scenarioOpen && (
+        <Dialog
+          title="Switch demo situation?"
+          primaryLabel={working ? "Opening…" : "Open situation"}
+          primaryDisabled={working || pendingScenario === letter}
+          onPrimary={() => void switchScenario()}
+          onClose={() => setScenarioOpen(false)}
+        >
+          <p>Choose a prepared situation for the demo. In everyday use, employees start from Home and ShareStack matches the situation automatically.</p>
+          <Select
+            id="scenario-switcher"
+            labelText="Scenario"
+            value={pendingScenario}
+            onChange={(event) => setPendingScenario(event.target.value as ScenarioLetter)}
+          >
+            {SCENARIOS.map((scenario) => <SelectItem key={scenario.letter} value={scenario.letter} text={scenario.label} />)}
+          </Select>
         </Dialog>
       )}
     </div>

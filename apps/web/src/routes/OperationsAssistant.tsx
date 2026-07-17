@@ -9,14 +9,15 @@ import {
   type ChatModelAdapter,
   type ThreadMessageLike,
 } from "@assistant-ui/react";
-import { ArrowDown, ArrowRight, ArrowUp, Checkmark, DataReference, Locked } from "@carbon/icons-react";
+import { ArrowDown, ArrowRight, ArrowUp, Checkmark, Locked } from "@carbon/icons-react";
 import ProductShell from "../components/ProductShell";
+import ConnectedSources from "../components/ConnectedSources";
 import {
   askOperationsAssistant,
+  recentRunForCase,
   startWorkItem,
   type OperationsAssistantResponse,
 } from "../lib/liveApi";
-import { getCannedAnswer } from "../lib/cannedAnswers";
 import type { OperationsAssistantMessage } from "../lib/liveTypes";
 
 const WELCOME = "Tell me what changed or ask what needs attention. I’ll match your question to verified operations data, explain the decision, and keep approval with you.";
@@ -36,13 +37,17 @@ interface PersistedSession {
 export default function OperationsAssistant() {
   const [params] = useSearchParams();
   const prompt = params.get("prompt")?.trim() ?? "";
-  const stored = useMemo(() => prompt ? null : readSession(), [prompt]);
+  const fresh = params.get("new") === "1";
+  const stored = useMemo(() => prompt || fresh ? null : readSession(), [fresh, prompt]);
   const [seed, setSeed] = useState<OperationsAssistantResponse | null>(stored?.response ?? null);
   const [loading, setLoading] = useState(Boolean(prompt));
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!prompt) return;
+    if (!prompt) {
+      if (fresh) setSeed(null);
+      return;
+    }
     let active = true;
     setLoading(true);
     setError("");
@@ -58,13 +63,24 @@ export default function OperationsAssistant() {
       .catch((reason: Error) => active && setError(reason.message))
       .finally(() => active && setLoading(false));
     return () => { active = false; };
-  }, [prompt]);
+  }, [fresh, prompt]);
 
   if (loading) {
     return (
       <ProductShell active="assistant">
-        <main className="assistant-loading" aria-live="polite">
-          <p>The operations agent is checking verified records and decision paths…</p>
+        <main className="assistant-page assistant-page--loading" aria-live="polite">
+          <header className="assistant-page__intro">
+            <p className="eyebrow">ShareStack decision agent</p>
+            <h1>Checking your question.</h1>
+            <p>The agent is matching it to today’s situations and verified operations records.</p>
+          </header>
+          <div className="assistant-layout">
+            <section className="assistant-thread assistant-loading-thread" aria-label="Conversation loading">
+              <div className="assistant-message assistant-message--user"><span>You</span><p>{prompt}</p></div>
+              <div className="assistant-message assistant-message--agent"><span>ShareStack decision agent</span><p>Reading the relevant records and checking whether this needs a decision…</p></div>
+            </section>
+            <aside className="assistant-context"><span>Current decision</span><h2>Matching this to the right situation</h2><p>The related issue, information checked, and next action will appear here.</p></aside>
+          </div>
         </main>
       </ProductShell>
     );
@@ -74,6 +90,7 @@ export default function OperationsAssistant() {
     <ProductShell active="assistant">
       {error && <div className="service-error assistant-route-error" role="alert">{error}</div>}
       <AssistantThread
+        key={prompt || (fresh ? "new" : "stored")}
         prompt={prompt}
         seed={seed}
         storedMessages={stored?.messages ?? []}
@@ -112,20 +129,6 @@ function AssistantThread({
           content: messageText(message),
         }))
         .filter((message) => message.content.length > 0);
-      const lastUser = [...conversation].reverse().find((message) => message.role === "user");
-      const canned = lastUser ? getCannedAnswer(lastUser.content) : null;
-      if (canned) {
-        contextItemId.current = undefined;
-        setResponse(canned);
-        writeSession({
-          messages: [
-            ...conversation.map((message) => textMessage(message.role, message.content)),
-            textMessage("assistant", canned.answer),
-          ],
-          response: canned,
-        });
-        return { content: [{ type: "text", text: canned.answer }] };
-      }
       try {
         const next = await askOperationsAssistant(conversation, contextItemId.current);
         if (abortSignal.aborted) throw new DOMException("Aborted", "AbortError");
@@ -155,14 +158,19 @@ function AssistantThread({
   }, [prompt, seed, storedMessages]);
   const runtime = useLocalRuntime(adapter, { initialMessages });
   const currentItem = response?.work_item ?? null;
+  const existingRun = currentItem ? recentRunForCase(currentItem.case_key) : undefined;
 
   async function openDecision() {
     if (!currentItem) return;
+    if (existingRun) {
+      navigate(`/runs/${existingRun.run_id}`);
+      return;
+    }
     setOpening(true);
     setError("");
     try {
       const run = await startWorkItem(currentItem);
-      navigate(`/runs/${run.run_id}`);
+      navigate(`/runs/${run.run_id}`, { state: { autoAnalyze: true } });
     } catch (reason) {
       setError((reason as Error).message);
       setOpening(false);
@@ -173,14 +181,27 @@ function AssistantThread({
     navigate(`/assistant?prompt=${encodeURIComponent(question)}`);
   }
 
+  function startNewConversation() {
+    sessionStorage.removeItem(SESSION_KEY);
+    navigate("/assistant?new=1");
+  }
+
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <main className="assistant-page">
-        <header className="assistant-page__intro">
-          <p className="eyebrow">Nourish decision agent</p>
-          <h1>Ask, understand, then decide.</h1>
-          <p>Use plain language. The agent matches your situation, reads verified records, and opens one safe decision flow.</p>
-        </header>
+        <div className="assistant-page__heading">
+          <header className="assistant-page__intro">
+            <p className="eyebrow">ShareStack decision agent</p>
+            <h1>Ask, understand, then decide.</h1>
+            <p>Use plain language. The agent matches your situation, reads verified records, and opens one safe decision flow.</p>
+          </header>
+          <button type="button" className="assistant-new" onClick={startNewConversation}>New conversation</button>
+        </div>
+        {currentItem && <div className="assistant-casebar">
+          <span>Discussing</span>
+          <strong>{currentItem.presentation.issue.title}</strong>
+          {existingRun && <button type="button" onClick={() => navigate(`/runs/${existingRun.run_id}`)}>Return to decision<ArrowRight size={16} /></button>}
+        </div>}
         <div className="assistant-layout">
           <ThreadPrimitive.Root className="assistant-thread">
             <ThreadPrimitive.Viewport className="assistant-thread__viewport">
@@ -196,8 +217,8 @@ function AssistantThread({
             </ThreadPrimitive.Viewport>
           </ThreadPrimitive.Root>
 
-          <aside className="assistant-context" aria-label="Current decision context" aria-live="polite">
-            <span>Agent decision context</span>
+          <aside className="assistant-context" aria-label="Current decision" aria-live="polite">
+            <span>Current decision</span>
             {currentItem && response ? (
               <>
                 <div className={`assistant-context__status assistant-context__status--${response.response_type.toLowerCase()}`}>
@@ -205,17 +226,27 @@ function AssistantThread({
                 </div>
                 <h2>{currentItem.presentation.issue.title}</h2>
                 <p>{currentItem.presentation.issue.summary}</p>
-                <div className="assistant-context__source"><DataReference size={17} />{currentItem.source_count} verified sources checked</div>
+                <div className="assistant-context__source"><Checkmark size={17} />{currentItem.source_count} case records checked</div>
                 <div className={`agent-mode-line${response.agent.effective_mode === "offline_fallback" ? " agent-mode-line--fallback" : ""}`}><span className="agent-mode-dot" aria-hidden />{agentModeLabel(response)}</div>
+                <section className="assistant-work" aria-label="What ShareStack did">
+                  <strong>What ShareStack did</strong>
+                  <ol>
+                    <li><span>1</span>Matched your question to this situation</li>
+                    <li><span>2</span>Read the relevant operational records</li>
+                    <li><span>3</span>{currentItem.state === "INFORMATION_NEEDED" ? "Found a conflict and stopped safely" : "Checked the available responses and safety limits"}</li>
+                  </ol>
+                </section>
+                <ConnectedSources sources={currentItem.connected_sources ?? []} recordCount={currentItem.source_count} />
                 <ul className="assistant-guardrails">
-                  <li><Checkmark size={15} />Facts grounded in frozen records</li>
-                  <li><Checkmark size={15} />Safety constraints rechecked</li>
-                  <li><Locked size={15} />{currentItem.state === "INFORMATION_NEEDED" ? "Approval locked until records agree" : "Manager approval remains required"}</li>
+                  <li><Checkmark size={15} />The answer uses only the information shown here</li>
+                  <li><Locked size={15} />{currentItem.state === "INFORMATION_NEEDED" ? "Approval is unavailable until the records agree" : "You still make the final decision"}</li>
                 </ul>
                 <button type="button" onClick={() => void openDecision()} disabled={opening}>
                   {opening
                     ? "Agent is preparing the review…"
-                    : currentItem.state === "INFORMATION_NEEDED"
+                    : existingRun
+                      ? "Return to this decision"
+                      : currentItem.state === "INFORMATION_NEEDED"
                       ? "Review blocking records"
                       : "Open agent recommendation"}
                   <ArrowRight size={18} />
@@ -256,7 +287,7 @@ function UserMessage() {
 function AssistantMessage() {
   return (
     <MessagePrimitive.Root className="assistant-message assistant-message--agent">
-      <span>Nourish decision agent</span>
+      <span>ShareStack decision agent</span>
       <MessagePrimitive.Parts />
     </MessagePrimitive.Root>
   );
@@ -289,8 +320,6 @@ function writeSession(session: PersistedSession) {
 }
 
 function seedRequest(prompt: string): Promise<OperationsAssistantResponse> {
-  const canned = getCannedAnswer(prompt);
-  if (canned) return Promise.resolve(canned);
   const existing = seedRequests.get(prompt);
   if (existing) return existing;
   const request = askOperationsAssistant([{ role: "user", content: prompt }]);
@@ -314,10 +343,10 @@ function responseLabel(response: OperationsAssistantResponse): string {
 function agentModeLabel(response: OperationsAssistantResponse): string {
   const { agent } = response;
   if (agent.effective_mode === "live" && agent.status === "live_verified") {
-    return `Live ${agent.provider ?? "AI"} agent · verified output`;
+    return "Decision agent completed its review";
   }
   if (agent.effective_mode === "offline_fallback") {
-    return "Verified local fallback · agent service unavailable";
+    return "Verified backup review completed";
   }
-  return "Verified local decision agent";
+  return "Verified decision review completed";
 }

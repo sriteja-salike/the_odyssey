@@ -244,11 +244,11 @@ function buildTrace(letter: ScenarioLetter, runId: string): DecisionTrace {
     exposes_chain_of_thought: false,
     final_status: status === "ABSTAINED" ? "ABSTAINED" : "PASSED",
     stages: [
-      stage("CONTEXT_FROZEN", "CONTEXT_LAYER", "PASSED", "Scenario inputs and knowledge snapshots were pinned for this run."),
-      stage("DETERMINISTIC_SOLVER", "SOLVER", "PASSED", "The deterministic engine evaluated constraints and ranked the frozen action catalog.", { solver_id: SOLVER.solver_id }),
+      stage("CONTEXT_FROZEN", "CONTEXT_LAYER", "PASSED", "The operational information available when this review began was saved and checked."),
+      stage("DETERMINISTIC_SOLVER", "SOLVER", "PASSED", "ShareStack compared the available responses against inventory, capacity, budget, and timing limits.", { solver_id: SOLVER.solver_id }),
       stage("DECISION_ORCHESTRATOR", "AI_AGENT", "FALLBACK", "A verified template explanation was used because the live API was unavailable.", { effective_mode: "offline_fallback" }),
       stage("INDEPENDENT_REVIEWER", "AI_AGENT", "SKIPPED", "The browser fallback cannot call an independent model reviewer.", { effective_mode: "offline_fallback" }),
-      stage("AUTHORITY_VALIDATOR", "POLICY_ENGINE", "PASSED", "The displayed recommendation still matches the frozen deterministic result."),
+      stage("AUTHORITY_VALIDATOR", "POLICY_ENGINE", "PASSED", "The recommendation still matches the checked information and requires manager approval."),
     ],
   };
 }

@@ -1,6 +1,10 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+const proxy = {
+  '/api': process.env.VITE_API_PROXY_TARGET ?? 'http://127.0.0.1:8180',
+}
+
 export default defineConfig({
   plugins: [react()],
   // Pre-bundle React and the assistant-ui runtime together in one optimize pass so
@@ -20,8 +24,7 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    proxy: {
-      '/api': process.env.VITE_API_PROXY_TARGET ?? 'http://127.0.0.1:8180',
-    },
+    proxy,
   },
+  preview: { port: 5173, proxy },
 })
